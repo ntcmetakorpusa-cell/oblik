@@ -130,6 +130,15 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);font-size
 
 .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;}
 .add-card{margin-bottom:16px;}
+.clock{font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--muted);white-space:nowrap;letter-spacing:.2px;}
+.cards2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.card-h{font-weight:700;font-size:15px;margin-bottom:12px;}
+.switch-list{display:flex;flex-direction:column;}
+.switch-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px;}
+.switch-row:last-child{border-bottom:none;}
+.switch-row input{width:20px;height:20px;cursor:pointer;flex:0 0 auto;}
+@media(max-width:720px){.cards2{grid-template-columns:1fr;}}
+@media(max-width:640px){.clock{display:none;}}
 .stat-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
 .stat{flex:1 1 120px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:13px 15px;}
 .stat-val{font-size:22px;font-weight:800;letter-spacing:-.5px;line-height:1.1;}
@@ -323,12 +332,14 @@ function defaultFields(){ return [
   {id:"material", label:"Витрата матеріалу", type:"number", unit:"кг", options:[], scope:"all", showInTable:true, sumInReports:true},
   {id:"defect", label:"Брак", type:"number", unit:"шт", options:[], scope:"all", showInTable:true, sumInReports:true}
 ]; }
-function defaultMeta(){ return { admin:{name:"Керуючий",pin:""}, managers:[], departments:[], employees:[], notes:[], drawings:[], orders:[], fields:defaultFields() }; }
+function defaultMeta(){ return { admin:{name:"Керуючий",pin:""}, managers:[], departments:[], employees:[], notes:[], drawings:[], orders:[], fields:defaultFields(), settings:{features:{week:true,reports:true,orders:true,fields:true,drawings:true,notes:true}} }; }
 function migrate(m){
   ["managers","departments","employees","notes","drawings","orders"].forEach(k=>{ if(!Array.isArray(m[k])) m[k]=[]; });
   if(!Array.isArray(m.fields)) m.fields=defaultFields();
   m.departments.forEach(d=>{ if(!Array.isArray(d.managerIds)) d.managerIds = d.managerId?[d.managerId]:[]; });
   m.managers.forEach(mg=>{ if(!mg.perms) mg.perms={ employees:true, editRecords:true, export:true }; });
+  m.settings = m.settings || {};
+  m.settings.features = Object.assign({week:true,reports:true,orders:true,fields:true,drawings:true,notes:true}, m.settings.features||{});
 }
 
 async function startFirebase(){
@@ -483,9 +494,27 @@ function workspaceHTML(){
   const me = admin ? M().admin.name : (M().managers.find(x=>x.id===state.session.managerId)||{}).name;
   const P=myPerms();
   let tabs;
-  if(admin){ tabs=[["journal","Журнал"],["week","Тиждень"],["reports","Звіти"],["employees","Працівники"],["departments","Дільниці"],["managers","Керівники"],["orders","Замовлення"],["fields","Поля"],["drawings","Креслення"],["notes","Нотатки"],["export","Експорт"]]; }
-  else { tabs=[["journal","Журнал"],["week","Тиждень"],["reports","Звіти"]]; if(P.employees) tabs.push(["employees","Працівники"]); tabs.push(["drawings","Креслення"],["notes","Нотатки"]); if(P.export) tabs.push(["export","Експорт"]); }
-  const showMonth = !["notes","managers","departments","orders","fields"].includes(state.view);
+  const F=(M().settings&&M().settings.features)||{}; const on=(k)=>F[k]!==false;
+  if(admin){
+    tabs=[["journal","Журнал"]];
+    if(on("week")) tabs.push(["week","Тиждень"]);
+    if(on("reports")) tabs.push(["reports","Звіти"]);
+    tabs.push(["employees","Працівники"],["departments","Дільниці"],["managers","Керівники"]);
+    if(on("orders")) tabs.push(["orders","Замовлення"]);
+    if(on("fields")) tabs.push(["fields","Поля"]);
+    if(on("drawings")) tabs.push(["drawings","Креслення"]);
+    if(on("notes")) tabs.push(["notes","Нотатки"]);
+    tabs.push(["export","Експорт"],["settings","Налаштування"]);
+  } else {
+    tabs=[["journal","Журнал"]];
+    if(on("week")) tabs.push(["week","Тиждень"]);
+    if(on("reports")) tabs.push(["reports","Звіти"]);
+    if(P.employees) tabs.push(["employees","Працівники"]);
+    if(on("drawings")) tabs.push(["drawings","Креслення"]);
+    if(on("notes")) tabs.push(["notes","Нотатки"]);
+    if(P.export) tabs.push(["export","Експорт"]);
+  }
+  const showMonth = !["notes","managers","departments","orders","fields","settings"].includes(state.view);
 
   let body="";
   if(state.view==="journal") body=journalHTML();
@@ -496,6 +525,7 @@ function workspaceHTML(){
   else if(state.view==="managers"&&admin) body=managersHTML();
   else if(state.view==="orders"&&admin) body=ordersHTML();
   else if(state.view==="fields"&&admin) body=fieldsHTML();
+  else if(state.view==="settings"&&admin) body=settingsHTML();
   else if(state.view==="drawings") body=drawingsHTML();
   else if(state.view==="notes") body=notesHTML();
   else if(state.view==="export" && (admin||P.export)) body=exportHTML();
@@ -508,6 +538,7 @@ function workspaceHTML(){
         <div class="topbar-title"><span class="tt-main">Облік робіт</span><span class="tt-sub">${admin?"Керуючий":"Керівник"} · ${esc(me||"—")}</span></div>
       </div>
       <div class="topbar-right">
+        <span class="clock" id="topclock">${nowStr()}</span>
         <button class="icon-btn" data-action="theme" title="Тема">${themeIcon()}</button>
         ${mode==="cloud"?'<span class="sync"><span class="dotlive"></span>онлайн</span>':'<span class="sync demo">демо · цей пристрій</span>'}
         <button class="btn btn-ghost sm" data-action="logout">Змінити кабінет</button>
@@ -695,17 +726,38 @@ function managersHTML(){
   const permTxt=(p)=>{ p=p||{}; const a=[]; if(p.employees)a.push("працівники"); if(p.editRecords)a.push("редагування"); if(p.export)a.push("експорт"); return a.length?a.join(", "):"—"; };
   const rows=M().managers.map(m=>{const dl=M().departments.filter(d=>(d.managerIds||[]).includes(m.id)).map(d=>esc(d.name)); return `<tr><td>${esc(m.name)}</td><td>${dl.length?dl.join(", "):'<span class="muted">—</span>'}</td><td class="small">${esc(permTxt(m.perms))}</td><td class="num mono">${m.pin?(state.showPins?esc(m.pin):"••••"):"—"}</td><td class="actions-cell"><button class="mini" data-action="mgr-edit" data-id="${m.id}">✎</button><button class="mini danger" data-action="mgr-del" data-id="${m.id}">✕</button></td></tr>`;}).join("");
   return `<div class="section-head"><div><h2 class="h2">Керівники дільниць</h2><div class="muted small">У кожного свій кабінет. Права та дільниці налаштовуються кнопкою ✎.</div></div><button class="btn btn-ghost sm" data-action="toggle-pins">${state.showPins?"Приховати PIN":"Показати PIN"}</button></div>
-    <div class="card add-card"><div class="muted small mb8" style="font-weight:600">Кабінет керуючого</div><div class="form-inline">
-      <input class="input grow" id="adm-name" value="${esc(M().admin.name||"")}" placeholder="Назва кабінету керуючого" />
-      <input class="input pin-sm" id="adm-pin" inputmode="numeric" value="${esc(M().admin.pin||"")}" placeholder="PIN" />
-      <button class="btn btn-primary" data-action="admin-save">Зберегти</button>
-    </div><div class="muted small mt8">PIN необов'язковий. Залиште порожнім, щоб входити без коду.</div></div>
     <div class="card add-card"><div class="form-inline">
       <input class="input grow" id="mgr-name" data-live="1" placeholder="Ім'я керівника" />
       <input class="input pin-sm" id="mgr-pin" inputmode="numeric" placeholder="PIN" />
       <button class="btn btn-primary" data-action="mgr-add">Додати</button>
     </div></div>
     ${M().managers.length===0?'<div class="empty small">Керівників поки немає.</div>':`<div class="table-wrap"><table class="table"><thead><tr><th>Ім'я</th><th>Дільниці</th><th>Права</th><th class="num">PIN</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`}`;
+}
+
+function settingsHTML(){
+  const F=(M().settings&&M().settings.features)||{}; const on=(k)=>F[k]!==false;
+  const feats=[["week","Тиждень"],["reports","Звіти"],["orders","Замовлення"],["fields","Поля"],["drawings","Креслення"],["notes","Нотатки"]];
+  const featRows=feats.map(([k,l])=>`<label class="switch-row"><span>${l}</span><input type="checkbox" data-action="feat-toggle" data-key="${k}" ${on(k)?"checked":""}/></label>`).join("");
+  return `<div class="section-head"><div><h2 class="h2">Налаштування</h2><div class="muted small">Особистий кабінет керуючого та функції застосунку</div></div></div>
+    <div class="cards2">
+      <div class="card">
+        <div class="card-h">Кабінет керуючого</div>
+        <label class="field mb12"><span>Назва кабінету</span><input class="input" id="adm-name" value="${esc(M().admin.name||"")}" placeholder="Напр.: Керуючий"/></label>
+        <label class="field mb12"><span>PIN (необов'язково)</span><input class="input" id="adm-pin" inputmode="numeric" value="${esc(M().admin.pin||"")}" placeholder="4 цифри"/></label>
+        <div class="muted small mb12">PIN захищає вхід у ваш кабінет. Залиште порожнім, щоб входити без коду.</div>
+        <div class="row end"><button class="btn btn-primary" data-action="admin-save">Зберегти</button></div>
+      </div>
+      <div class="card">
+        <div class="card-h">Функції застосунку</div>
+        <div class="muted small mb12">Увімкніть лише потрібне — зайві вкладки сховаються в усіх користувачів.</div>
+        <div class="switch-list">${featRows}</div>
+      </div>
+    </div>
+    <div class="card mt16">
+      <div class="card-h">Відділи / дільниці</div>
+      <div class="muted small">Додавання, редагування (✎) та видалення (✕) відділів — у вкладці «Дільниці». Там само одну дільницю можна призначити кільком керівникам.</div>
+      <div class="row mt12"><button class="btn btn-ghost sm" data-action="tab" data-view="departments">Перейти до «Дільниці» →</button></div>
+    </div>`;
 }
 
 // ---------- Креслення ----------
@@ -944,6 +996,7 @@ document.addEventListener("change", async (e)=>{
   if(a==="f-dept"){ state.filterDept=t.value; state.filterEmp="all"; render(); return; }
   if(a==="f-emp"){ state.filterEmp=t.value; render(); return; }
   if(a==="rc-dept"){ const dep=t.value; const sel=$("rc-emp"); if(sel){ sel.innerHTML = `<option value="">${dep?"— оберіть —":"спочатку дільниця"}</option>` + M().employees.filter(x=>x.departmentId===dep).map(x=>`<option value="${x.id}">${esc(x.fio)}</option>`).join(""); } const cc=$("rc-custom"); if(cc) cc.innerHTML=customFieldsHTML(dep,null); const tot=$("rc-total"); if(tot) tot.textContent=fmtMinutes(num($("rc-qty").value)*num($("rc-min").value)); return; }
+  if(a==="feat-toggle"){ const k=t.dataset.key; const val=t.checked; saveMeta(m=>{ m.settings=m.settings||{}; m.settings.features=m.settings.features||{}; m.settings.features[k]=val; }); return; }
   if(a==="draw-file"){ handleDrawFile(t.files&&t.files[0]); return; }
 });
 // поиск и пересчёт (input)
@@ -1034,7 +1087,10 @@ function toast(type,msg){
 }
 
 // ---------- старт ----------
+function nowStr(){ try{ return new Date().toLocaleString("uk-UA",{weekday:"short",day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit",second:"2-digit"}); }catch(e){ return new Date().toLocaleString(); } }
+function startClock(){ setInterval(()=>{ const el=document.getElementById("topclock"); if(el) el.textContent=nowStr(); },1000); }
 if(state.configured) startFirebase(); else startLocal();
+startClock();
 </script>
 </body>
 </html>
