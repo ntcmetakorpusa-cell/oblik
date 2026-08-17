@@ -69,7 +69,7 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);font-size
 .tab-active{color:var(--blue-ink);border-bottom-color:var(--blue);font-weight:600;}
 .monthbar{position:sticky;top:99px;z-index:14;display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--line-soft);}
 .month-label{font-weight:600;min-width:130px;text-align:center;text-transform:capitalize;}
-.content{max-width:1080px;margin:0 auto;padding:18px 16px 70px;}
+.content{max-width:1800px;margin:0 auto;padding:18px 24px 70px;}
 .section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
 .h2{font-size:19px;font-weight:700;margin:0 0 2px;letter-spacing:-.2px;}
 
@@ -191,6 +191,34 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);font-size
 .draw-ico{font-size:30px;} .draw-open{font-size:12px;color:var(--blue-ink);font-weight:600;}
 .draw-meta{padding:10px 12px;} .draw-name{font-weight:600;font-size:13.5px;} .draw-sub{font-size:11.5px;color:var(--muted);margin-top:2px;}
 .draw-del{position:absolute;top:8px;right:8px;background:rgba(255,255,255,.9);}
+.route-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;}
+.route-card{display:flex;flex-direction:column;gap:10px;padding:14px;position:relative;}
+.draw-row{display:flex;align-items:flex-start;gap:12px;}
+.draw-thumb.sm{width:64px;height:64px;flex:0 0 auto;}
+.route{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:8px 10px;}
+.route-arrow{opacity:.5;}
+.route-now{color:var(--blue-ink);font-weight:700;}
+.draw-actions{display:flex;flex-direction:column;gap:8px;}
+.pass-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.select.sm,.btn.sm{font-size:13px;padding:7px 12px;}
+.mt6{margin-top:6px;}
+.board-bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px;}
+.date-nav{display:flex;align-items:center;gap:6px;}
+.date-nav .input{width:auto;}
+.emp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;}
+.emp-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;}
+.emp-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;}
+.emp-name{font-weight:700;}
+.emp-sum{color:var(--muted);font-size:13px;white-space:nowrap;}
+.day-lines{display:flex;flex-direction:column;gap:8px;}
+.day-line{display:flex;align-items:center;gap:8px;justify-content:space-between;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:13px;flex-wrap:wrap;}
+.day-line-main{flex:1;min-width:120px;}
+.day-line-nums{color:var(--muted);white-space:nowrap;}
+.day-line-act{display:flex;gap:4px;}
+.mt8{margin-top:8px;}
+.measure{display:flex;gap:6px;}
+.measure .input{flex:1;min-width:0;}
+.unit-sel{width:auto;flex:0 0 auto;min-width:64px;}
 .draw-full{width:100%;height:auto;border-radius:8px;border:1px solid var(--line);}
 
 .notes-list{display:flex;flex-direction:column;gap:10px;}
@@ -303,6 +331,8 @@ const state = {
   weekStart: startOfWeek(new Date()),
   loginPick: null,
   showPins: false,
+  boardDate: todayStr(),
+  boardDept: "",
 };
 let db=null, auth=null, chartRegistry=[];
 let mode="local"; const fb={};
@@ -334,7 +364,9 @@ function doLogin(){
 function defaultFields(){ return [
   {id:"unit", label:"Одиниця виміру", type:"select", unit:"", options:["шт","кг","м","м²","компл."], scope:"all", showInTable:false, sumInReports:false},
   {id:"cut", label:"Час порізки на 1 шт", type:"number", unit:"хв", options:[], scope:"all", showInTable:false, sumInReports:false},
-  {id:"material", label:"Витрата матеріалу", type:"number", unit:"кг", options:[], scope:"all", showInTable:true, sumInReports:true},
+  {id:"material", label:"Витрата матеріалу", type:"measure", unit:"", options:["м","кг"], scope:"all", showInTable:true, sumInReports:false},
+  {id:"mat", label:"Матеріал", type:"select", unit:"", options:["Сталь","Алюміній","Нержавійка","ПШ","Пластик","Мідь"], scope:"all", showInTable:true, sumInReports:false},
+  {id:"profile", label:"Профіль", type:"select", unit:"", options:["Труба","Круг","Квадрат","Шестигранник"], scope:"all", showInTable:true, sumInReports:false},
   {id:"defect", label:"Брак", type:"number", unit:"шт", options:[], scope:"all", showInTable:true, sumInReports:true}
 ]; }
 function defaultMeta(){ return { admin:{name:"Керуючий",pin:""}, managers:[], departments:[], employees:[], notes:[], drawings:[], orders:[], fields:defaultFields(), settings:{features:{week:true,reports:true,orders:true,fields:true,drawings:true,notes:true}} }; }
@@ -345,6 +377,15 @@ function migrate(m){
   m.managers.forEach(mg=>{ if(!mg.perms) mg.perms={ employees:true, editRecords:true, export:true }; });
   m.settings = m.settings || {};
   m.settings.features = Object.assign({week:true,reports:true,orders:true,fields:true,drawings:true,notes:true}, m.settings.features||{});
+  (m.fields||[]).forEach(fl=>{ if(fl.id==="material" && fl.type!=="measure"){ fl.type="measure"; if(!Array.isArray(fl.options)||!fl.options.length) fl.options=["м","кг"]; else if(fl.options.indexOf("кг")<0) fl.options.push("кг"); fl.unit=""; fl.sumInReports=false; } });
+  if(!m.settings.seededMatProfile){
+    const ensure=(fld)=>{ if(!m.fields.some(x=>x.id===fld.id)) m.fields.push(fld); };
+    ensure({id:"mat",label:"Матеріал",type:"select",unit:"",options:["Сталь","Алюміній","Нержавійка","ПШ","Пластик","Мідь"],scope:"all",showInTable:true,sumInReports:false});
+    ensure({id:"profile",label:"Профіль",type:"select",unit:"",options:["Труба","Круг","Квадрат","Шестигранник"],scope:"all",showInTable:true,sumInReports:false});
+    m.settings.seededMatProfile=true;
+  }
+  const firstDep=(m.departments[0]&&m.departments[0].id)||"";
+  m.drawings.forEach(d=>{ if(d.currentDept===undefined){ d.currentDept=(d.departmentId&&d.departmentId!=="all")?d.departmentId:firstDep; } if(!d.status) d.status="waiting"; if(d.finished===undefined) d.finished=false; if(!Array.isArray(d.history)) d.history=d.currentDept?[{deptId:d.currentDept,at:d.createdAt||todayStr()}]:[]; });
 }
 
 async function startFirebase(){
@@ -422,11 +463,13 @@ function orderLabel(o){ if(!o) return ""; const n=o.number?("№ "+o.number):"";
 function visibleDeptIdSet(){ return new Set(visibleDepts().map(d=>d.id)); }
 function recTotalMin(r){ return num(r.qty)*(num(r.minutesPerUnit)+num((r.custom||{}).cut||0)); }
 function recDefect(r){ return num((r.custom||{}).defect||0); }
+function shiftDay(d,delta){ try{ const dt=new Date(d+"T00:00:00"); dt.setDate(dt.getDate()+delta); return dt.toISOString().slice(0,10); }catch(e){ return d; } }
 function customInput(fl,f){
   const val = (f&&f.custom&&f.custom[fl.id]!=null)?f.custom[fl.id]:"";
-  const lbl = esc(fl.label)+(fl.unit?` (${esc(fl.unit)})`:"");
+  const lbl = esc(fl.label)+((fl.unit&&fl.type!=="measure")?` (${esc(fl.unit)})`:"");
   let inp;
   if(fl.type==="select"){ inp=`<select class="select" id="rc-cf-${fl.id}"><option value="">—</option>${(fl.options||[]).map(o=>`<option value="${esc(o)}" ${String(val)===String(o)?"selected":""}>${esc(o)}</option>`).join("")}</select>`; }
+  else if(fl.type==="measure"){ const uval=(f&&f.custom&&f.custom[fl.id+"__u"])||((fl.options||[])[0]||""); const uo=(fl.options||[]).map(o=>`<option value="${esc(o)}" ${String(uval)===String(o)?"selected":""}>${esc(o)}</option>`).join(""); inp=`<div class="measure"><input type="number" class="input" id="rc-cf-${fl.id}" value="${esc(val)}" /><select class="select unit-sel" id="rc-cfu-${fl.id}">${uo}</select></div>`; }
   else if(fl.type==="number"){ inp=`<input type="number" class="input" id="rc-cf-${fl.id}"${fl.id==="cut"?' data-action="rc-calc"':''} value="${esc(val)}" />`; }
   else { inp=`<input class="input" id="rc-cf-${fl.id}" value="${esc(val)}" />`; }
   return `<label class="field"><span>${lbl}</span>${inp}</label>`;
@@ -501,7 +544,7 @@ function workspaceHTML(){
   let tabs;
   const F=(M().settings&&M().settings.features)||{}; const on=(k)=>F[k]!==false;
   if(admin){
-    tabs=[["journal","Журнал"]];
+    tabs=[["journal","Журнал"],["today","Сьогодні"]];
     if(on("week")) tabs.push(["week","Тиждень"]);
     if(on("reports")) tabs.push(["reports","Звіти"]);
     tabs.push(["employees","Працівники"],["departments","Дільниці"],["managers","Керівники"]);
@@ -511,7 +554,7 @@ function workspaceHTML(){
     if(on("notes")) tabs.push(["notes","Нотатки"]);
     tabs.push(["export","Експорт"],["settings","Мій кабінет"]);
   } else {
-    tabs=[["journal","Журнал"]];
+    tabs=[["journal","Журнал"],["today","Сьогодні"]];
     if(on("week")) tabs.push(["week","Тиждень"]);
     if(on("reports")) tabs.push(["reports","Звіти"]);
     if(P.employees) tabs.push(["employees","Працівники"]);
@@ -520,10 +563,11 @@ function workspaceHTML(){
     if(P.export) tabs.push(["export","Експорт"]);
     tabs.push(["settings","Мій кабінет"]);
   }
-  const showMonth = !["notes","managers","departments","orders","fields","settings"].includes(state.view);
+  const showMonth = !["notes","managers","departments","orders","fields","settings","today"].includes(state.view);
 
   let body="";
   if(state.view==="journal") body=journalHTML();
+  else if(state.view==="today") body=todayHTML();
   else if(state.view==="week") body=weekHTML();
   else if(state.view==="reports") body=reportsHTML();
   else if(state.view==="employees" && (admin||P.employees)) body=employeesHTML();
@@ -570,6 +614,40 @@ function monthRecords(){
     .filter(r=>{ if(!state.search)return true; const q=state.search.toLowerCase(); return (r.task||"").toLowerCase().includes(q)||empName(r.employeeId).toLowerCase().includes(q); })
     .sort((a,b)=> a.date<b.date?1:a.date>b.date?-1:0);
 }
+function todayHTML(){
+  const vd=visibleDepts();
+  if(vd.length===0) return `<div class="section-head"><div><h2 class="h2">Робота за день</h2></div></div>
+    <div class="empty">${isAdmin()?"Спочатку додайте дільницю у вкладці «Дільниці».":"Вам ще не призначено дільницю. Зверніться до керуючого."}</div>`;
+  const P=myPerms(); const canEdit=isAdmin()||P.editRecords;
+  if(!state.boardDept || !vd.some(d=>d.id===state.boardDept)) state.boardDept=vd[0].id;
+  const dep=state.boardDept, date=state.boardDate;
+  const emps=M().employees.filter(e=>e.departmentId===dep);
+  const allDay=state.records.filter(r=>r.date===date && r.departmentId===dep);
+  const totQty=allDay.reduce((s,r)=>s+num(r.qty),0);
+  const totMin=allDay.reduce((s,r)=>s+recTotalMin(r),0);
+  const totDef=allDay.reduce((s,r)=>s+recDefect(r),0);
+  const cards= emps.length? emps.map(e=>{
+    const rs=allDay.filter(r=>r.employeeId===e.id);
+    const lines= rs.length? rs.map(r=>`<div class="day-line"><div class="day-line-main"><b>${esc(r.task)}</b>${r.orderNo?` · <span class="muted">№${esc(r.orderNo)}</span>`:""}${r.product?` · <span class="muted">${esc(r.product)}</span>`:""}</div><div class="day-line-nums mono">${esc(r.qty)} шт · ${fmtMinutes(recTotalMin(r))}${recDefect(r)?` · брак ${recDefect(r)}`:""}</div>${canEdit?`<div class="day-line-act"><button class="mini" data-action="rec-edit" data-id="${r.id}">✎</button><button class="mini danger" data-action="rec-del" data-id="${r.id}">✕</button></div>`:""}</div>`).join("") : '<div class="muted small">За цей день ще нічого не внесено.</div>';
+    const esum=rs.reduce((s,r)=>s+num(r.qty),0);
+    return `<div class="emp-card">
+      <div class="emp-head"><div class="emp-name">${esc(e.fio)}</div>${esum?`<span class="emp-sum mono">${esum} шт</span>`:""}</div>
+      <div class="day-lines">${lines}</div>
+      <button class="btn btn-ghost sm mt8" data-action="board-add" data-emp="${e.id}">+ Додати запис</button>
+    </div>`;
+  }).join("") : '<div class="empty">На цій дільниці немає працівників. Додайте їх у вкладці «Працівники».</div>';
+  return `<div class="section-head"><div><h2 class="h2">Робота за день</h2><div class="muted small">Вносьте по кожному працівнику, що зроблено за обраний день</div></div></div>
+    <div class="board-bar">
+      <div class="date-nav"><button class="icon-btn" data-action="board-prev">‹</button><input type="date" class="input" id="board-date" data-action="board-date" value="${esc(date)}"/><button class="icon-btn" data-action="board-next">›</button></div>
+      <select class="select" id="board-dept" data-action="board-dept">${vd.map(d=>`<option value="${d.id}" ${d.id===dep?"selected":""}>${esc(d.name)}</option>`).join("")}</select>
+    </div>
+    <div class="stat-row">
+      <div class="stat"><div class="stat-val mono">${totQty}</div><div class="stat-lbl">деталей за день</div></div>
+      <div class="stat"><div class="stat-val mono">${fmtMinutes(totMin)}</div><div class="stat-lbl">час за день</div></div>
+      <div class="stat"><div class="stat-val mono">${totDef}</div><div class="stat-lbl">браку</div></div>
+    </div>
+    <div class="emp-grid">${cards}</div>`;
+}
 function journalHTML(){
   const vd=visibleDepts();
   if(vd.length===0) return `<div class="section-head"><div><h2 class="h2">Журнал робіт</h2></div></div>
@@ -584,7 +662,7 @@ function journalHTML(){
   const th=tblFields.map(fl=>`<th class="num">${esc(fl.label)}</th>`).join("");
   const rows=recs.map(r=>{
     const cf=(r.custom||{});
-    const cfCells=tblFields.map(fl=>{ const v=cf[fl.id]; const disp=(v===undefined||v===null||v==="")?"":(fl.type==="number"?esc(v)+(fl.unit?(" "+esc(fl.unit)):""):esc(v)); return `<td class="num mono">${disp}</td>`; }).join("");
+    const cfCells=tblFields.map(fl=>{ const v=cf[fl.id]; let disp=""; if(!(v===undefined||v===null||v==="")){ if(fl.type==="measure"){ disp=esc(v)+" "+esc(cf[fl.id+"__u"]||((fl.options||[])[0]||"")); } else if(fl.type==="number"){ disp=esc(v)+(fl.unit?(" "+esc(fl.unit)):""); } else { disp=esc(v); } } return `<td class="num mono">${disp}</td>`; }).join("");
     return `<tr>
       <td class="mono nowrap">${esc(r.date)}</td>
       <td>${esc(deptName(r.departmentId))}</td>
@@ -793,20 +871,44 @@ function settingsHTML(){
 // ---------- Креслення ----------
 function drawingsHTML(){
   const admin=isAdmin(), vis=visibleDeptIdSet();
-  const list=M().drawings.filter(d=> admin || d.departmentId==="all" || vis.has(d.departmentId));
+  const list=M().drawings.filter(d=> admin || vis.has(d.currentDept));
+  const depts=M().departments;
   const uploader = admin ? `<div class="card add-card"><div class="form-inline wrap">
       <input class="input grow" id="draw-name" data-live="1" placeholder="Назва креслення" />
-      <select class="select" id="draw-target"><option value="all">Для всіх дільниць</option>${M().departments.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join("")}</select>
+      <select class="select" id="draw-target"><option value="">Стартова дільниця…</option>${depts.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join("")}</select>
       <input type="file" accept="image/*" class="file-input" id="draw-file" data-action="draw-file" />
       <label for="draw-file" class="btn btn-primary" id="draw-btn">Обрати файл</label>
-    </div></div>` : "";
-  const cards=list.map(d=>`<div class="draw-card">
-      <button class="draw-thumb" data-action="draw-open" data-id="${d.id}"><span class="draw-ico">📐</span><span class="draw-open">Відкрити</span></button>
-      <div class="draw-meta"><div class="draw-name">${esc(d.name)}</div><div class="draw-sub">${d.departmentId==="all"?"Усі дільниці":esc(deptName(d.departmentId))} · ${esc(d.createdAt)}</div></div>
-      ${admin?`<button class="mini danger draw-del" data-action="draw-del" data-id="${d.id}">✕</button>`:""}
-    </div>`).join("");
-  return `<h2 class="h2">Креслення</h2><div class="muted small mb12">${admin?"Завантажте креслення (фото або скан) і призначте дільницю — керівники побачать його в себе.":"Креслення, видані керуючим для вашої роботи."}</div>
-    ${uploader}${list.length===0?'<div class="empty">Креслень поки немає.</div>':`<div class="draw-grid">${cards}</div>`}`;
+    </div><div class="muted small mt8">Оберіть, з якої дільниці починається робота. Далі керівники передаватимуть креслення по маршруту.</div></div>` : "";
+  const statusBadge=(d)=> d.finished?'<span class="badge on">✓ Маршрут завершено</span>':(d.status==="in_work"?'<span class="badge" style="color:var(--blue-ink)">● В роботі</span>':'<span class="badge off">○ Очікує приймання</span>');
+  const routeTrail=(d)=>{ const names=(d.history||[]).map(h=>esc(deptName(h.deptId))); if(!names.length) return ""; return `<div class="route">${names.map((n,i)=>`${i?'<span class="route-arrow">→</span>':''}<span class="${i===names.length-1&&!d.finished?'route-now':''}">${n}</span>`).join("")}</div>`; };
+  const otherDepts=(cur)=> depts.filter(x=>x.id!==cur);
+  const cards=list.map(d=>{
+    const canAct = !d.finished && (admin || vis.has(d.currentDept));
+    let actions="";
+    if(!d.finished && canAct){
+      if(d.status==="waiting"){
+        actions=`<button class="btn btn-primary sm" data-action="draw-accept" data-id="${d.id}">Прийняти в роботу</button>`;
+      } else {
+        actions=`<div class="pass-row"><select class="select sm" id="pass-${d.id}"><option value="">Наступна дільниця…</option>${otherDepts(d.currentDept).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join("")}</select><button class="btn btn-ghost sm" data-action="draw-pass" data-id="${d.id}">Передати далі →</button></div>
+          <button class="btn btn-ghost sm" data-action="draw-finish" data-id="${d.id}">Завершити маршрут ✓</button>`;
+      }
+    }
+    return `<div class="draw-card route-card">
+      <div class="draw-row">
+        <button class="draw-thumb sm" data-action="draw-open" data-id="${d.id}"><span class="draw-ico">📐</span><span class="draw-open">Відкрити</span></button>
+        <div class="draw-meta">
+          <div class="draw-name">${esc(d.name)}</div>
+          <div class="draw-sub">Зараз на: <b>${esc(deptName(d.currentDept))||"—"}</b> · ${esc(d.createdAt)}</div>
+          <div class="mt6">${statusBadge(d)}</div>
+        </div>
+        ${admin?`<button class="mini danger draw-del" data-action="draw-del" data-id="${d.id}">✕</button>`:""}
+      </div>
+      ${routeTrail(d)}
+      ${actions?`<div class="draw-actions">${actions}</div>`:""}
+    </div>`;
+  }).join("");
+  return `<h2 class="h2">Креслення · маршрут</h2><div class="muted small mb12">${admin?"Завантажте креслення і оберіть стартову дільницю. Керівники прийматимуть його в роботу та передаватимуть далі по дільницях.":"Креслення на ваших дільницях. Прийміть у роботу та передайте далі, коли готово."}</div>
+    ${uploader}${list.length===0?'<div class="empty">Креслень поки немає.</div>':`<div class="route-grid">${cards}</div>`}`;
 }
 
 // ---------- Нотатки ----------
@@ -836,9 +938,9 @@ function exportHTML(){
 // =========================================================================
 // МОДАЛКА записи
 // =========================================================================
-function openRecordModal(editRec){
+function openRecordModal(editRec, prefill){
   const vd=visibleDepts();
-  const f = editRec || { id:"", date: monthOf(todayStr())===state.month?todayStr():state.month+"-01", departmentId: vd.length===1?vd[0].id:"", employeeId:"", orderNo:"", product:"", task:"", qty:1, minutesPerUnit:0, note:"", custom:{} };
+  const f = editRec || Object.assign({ id:"", date: monthOf(todayStr())===state.month?todayStr():state.month+"-01", departmentId: vd.length===1?vd[0].id:"", employeeId:"", orderNo:"", product:"", task:"", qty:1, minutesPerUnit:0, note:"", custom:{} }, prefill||{});
   const empOptions=(depId)=> M().employees.filter(e=>e.departmentId===depId).map(e=>`<option value="${e.id}" ${f.employeeId===e.id?"selected":""}>${esc(e.fio)}</option>`).join("");
   const initTotal=num(f.qty)*(num(f.minutesPerUnit)+num((f.custom||{}).cut||0));
   const orderOpts=(M().orders||[]).map(o=>`<option value="${esc(o.number)}">${esc(orderLabel(o))}</option>`).join("");
@@ -921,9 +1023,9 @@ function openFieldModal(id){
       <input type="hidden" id="fld-id" value="${esc(fl.id)}"/>
       <div class="form-grid">
         <label class="field full"><span>Назва поля</span><input class="input" id="fld-label" value="${esc(fl.label)}" placeholder="Напр.: Витрата матеріалу"/></label>
-        <label class="field"><span>Тип</span><select class="select" id="fld-type"><option value="text" ${fl.type==="text"?"selected":""}>Текст</option><option value="number" ${fl.type==="number"?"selected":""}>Число</option><option value="select" ${fl.type==="select"?"selected":""}>Список</option></select></label>
+        <label class="field"><span>Тип</span><select class="select" id="fld-type"><option value="text" ${fl.type==="text"?"selected":""}>Текст</option><option value="number" ${fl.type==="number"?"selected":""}>Число</option><option value="measure" ${fl.type==="measure"?"selected":""}>Число + одиниця</option><option value="select" ${fl.type==="select"?"selected":""}>Список</option></select></label>
         <label class="field"><span>Одиниця (кг, м…)</span><input class="input" id="fld-unit" value="${esc(fl.unit||"")}"/></label>
-        <label class="field full"><span>Варіанти списку (через кому)</span><input class="input" id="fld-options" value="${esc((fl.options||[]).join(", "))}" placeholder="лише для типу «Список»"/></label>
+        <label class="field full"><span>Варіанти / одиниці (через кому)</span><input class="input" id="fld-options" value="${esc((fl.options||[]).join(", "))}" placeholder="Список: варіанти. Число+одиниця: одиниці, напр. м, кг"/></label>
       </div>
       <div class="field mt12"><span>Показувати на дільницях</span>
         <label class="chk"><input type="checkbox" id="fld-all" ${isAll?"checked":""}/> Усі дільниці</label>
@@ -970,11 +1072,16 @@ document.addEventListener("click", async (e)=>{
   if(a==="modal-close"||a==="modal-bg"){ if(a==="modal-bg"&&e.target!==t)return; closeModal(); return; }
 
   if(a==="rec-new"){ openRecordModal(null); return; }
+  if(a==="board-add"){ openRecordModal(null,{date:state.boardDate,departmentId:state.boardDept,employeeId:t.dataset.emp}); return; }
+  if(a==="board-prev"){ state.boardDate=shiftDay(state.boardDate,-1); render(); return; }
+  if(a==="board-next"){ state.boardDate=shiftDay(state.boardDate,1); render(); return; }
+  if(a==="board-date"){ state.boardDate=t.value||todayStr(); render(); return; }
+  if(a==="board-dept"){ state.boardDept=t.value; render(); return; }
   if(a==="rec-edit"){ const r=state.records.find(x=>x.id===t.dataset.id); if(r)openRecordModal(r); return; }
   if(a==="rec-del"){ removeRecord(t.dataset.id); return; }
   if(a==="rc-save"){
     const dep=$("rc-dept").value;
-    const custom={}; fieldsFor(dep).forEach(fl=>{ const el=$("rc-cf-"+fl.id); if(el) custom[fl.id]= fl.type==="number"? num(el.value): el.value; });
+    const custom={}; fieldsFor(dep).forEach(fl=>{ const el=$("rc-cf-"+fl.id); if(el){ custom[fl.id]= (fl.type==="number"||fl.type==="measure")? num(el.value): el.value; if(fl.type==="measure"){ const us=$("rc-cfu-"+fl.id); if(us) custom[fl.id+"__u"]=us.value; } } });
     const rec={ date:$("rc-date").value, departmentId:dep, employeeId:$("rc-emp").value, orderNo:($("rc-order").value||"").trim(), product:($("rc-product").value||"").trim(), task:($("rc-task").value||"").trim(), qty:num($("rc-qty").value), minutesPerUnit:num($("rc-min").value), note:($("rc-note").value||"").trim(), custom };
     if(!rec.departmentId||!rec.employeeId||!rec.task){ toast("error","Заповніть дільницю, працівника та назву деталі"); return; }
     const id=$("rc-id").value; if(id) await editRecord(id,rec); else await addRecord(rec);
@@ -1004,7 +1111,7 @@ document.addEventListener("click", async (e)=>{
   if(a==="field-save"){
     const id=$("fld-id").value; const label=($("fld-label").value||"").trim(); if(!label){ toast("error","Введіть назву поля"); return; }
     const type=$("fld-type").value; const unit=($("fld-unit").value||"").trim();
-    const options=type==="select"?($("fld-options").value||"").split(",").map(x=>x.trim()).filter(Boolean):[];
+    const options=(type==="select"||type==="measure")?($("fld-options").value||"").split(",").map(x=>x.trim()).filter(Boolean):[];
     const all=$("fld-all").checked; let scope="all"; if(!all){ scope=[...document.querySelectorAll(".fld-dept-chk:checked")].map(x=>x.dataset.id); }
     const showInTable=$("fld-table").checked; const sumInReports=type==="number"&&$("fld-sum").checked;
     saveMeta(m=>{ if(id){ const x=m.fields.find(y=>y.id===id); if(x){ x.label=label;x.type=type;x.unit=unit;x.options=options;x.scope=scope;x.showInTable=showInTable;x.sumInReports=sumInReports; } } else { m.fields.push({id:uid(),label,type,unit,options,scope,showInTable,sumInReports}); } });
@@ -1016,6 +1123,9 @@ document.addEventListener("click", async (e)=>{
 
   if(a==="draw-open"){ openDrawing(t.dataset.id); return; }
   if(a==="draw-del"){ if(confirm("Видалити креслення?")) await deleteDrawing(t.dataset.id); return; }
+  if(a==="draw-accept"){ const id=t.dataset.id; saveMeta(m=>{ const d=m.drawings.find(x=>x.id===id); if(d) d.status="in_work"; }); toast("ok","Прийнято в роботу"); return; }
+  if(a==="draw-pass"){ const id=t.dataset.id; const sel=$("pass-"+id); const to=sel?sel.value:""; if(!to){ toast("error","Оберіть наступну дільницю"); return; } saveMeta(m=>{ const d=m.drawings.find(x=>x.id===id); if(d){ d.currentDept=to; d.status="waiting"; d.history=d.history||[]; d.history.push({deptId:to,at:todayStr()}); } }); toast("ok","Передано далі"); return; }
+  if(a==="draw-finish"){ const id=t.dataset.id; if(!confirm("Завершити маршрут цього креслення?"))return; saveMeta(m=>{ const d=m.drawings.find(x=>x.id===id); if(d) d.finished=true; }); toast("ok","Маршрут завершено"); return; }
 
   if(a==="export-xlsx"){ exportXlsx(); return; }
 });
@@ -1059,13 +1169,14 @@ async function handleDrawFile(file){
   const name=($("draw-name").value||"").trim();
   if(!name){ toast("error","Спочатку введіть назву креслення"); const fi=$("draw-file"); if(fi)fi.value=""; return; }
   const target=$("draw-target").value;
+  if(!target){ toast("error","Оберіть стартову дільницю"); const fi=$("draw-file"); if(fi)fi.value=""; return; }
   const btn=$("draw-btn"); if(btn){ btn.textContent="Завантаження…"; btn.classList.add("disabled"); }
   try{
     const dataUrl=await compressImage(file);
     if(dataUrl.length>900000){ toast("error","Файл завеликий. Візьміть менше зображення."); return; }
     const id=uid();
     await storeDrawing(id, dataUrl);
-    await saveMeta(m=>m.drawings.push({ id, name, departmentId:target, createdAt:todayStr() }));
+    await saveMeta(m=>m.drawings.push({ id, name, currentDept:target, status:"waiting", finished:false, history:[{deptId:target,at:todayStr()}], createdAt:todayStr() }));
     toast("ok","Креслення завантажено");
   }catch(err){ toast("error","Не вдалося завантажити креслення. Підтримуються зображення (jpg, png)."); }
   finally{ const b=$("draw-btn"); if(b){ b.textContent="Обрати файл"; b.classList.remove("disabled"); } const fi=$("draw-file"); if(fi)fi.value=""; }
@@ -1091,7 +1202,7 @@ function exportXlsx(){
     const flds=M().fields||[];
     const rows=recs.map(r=>{
       const row={ "Дата":r.date,"Дільниця":deptName(r.departmentId),"Працівник (ПІБ)":empName(r.employeeId),"Замовлення №":r.orderNo||"","Виріб":r.product||"","Деталь / заготовка":r.task,"Кількість":num(r.qty),"Час виготовлення/шт (хв)":num(r.minutesPerUnit),"Разом час (хв)":recTotalMin(r) };
-      flds.forEach(fl=>{ const v=(r.custom||{})[fl.id]; row[fl.label+(fl.unit?` (${fl.unit})`:"")] = fl.type==="number"?num(v||0):(v||""); });
+      flds.forEach(fl=>{ const v=(r.custom||{})[fl.id]; if(fl.type==="measure"){ const u=(r.custom||{})[fl.id+"__u"]||((fl.options||[])[0]||""); row[fl.label] = (v===undefined||v==="")?"":(num(v)+" "+u); } else { row[fl.label+(fl.unit?` (${fl.unit})`:"")] = fl.type==="number"?num(v||0):(v||""); } });
       row["Нотатка"]=r.note||"";
       return row;
     });
