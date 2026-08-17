@@ -367,6 +367,8 @@ function defaultFields(){ return [
   {id:"material", label:"Витрата матеріалу", type:"measure", unit:"", options:["м","кг"], scope:"all", showInTable:true, sumInReports:false},
   {id:"mat", label:"Матеріал", type:"select", unit:"", options:["Сталь","Алюміній","Нержавійка","ПШ","Пластик","Мідь"], scope:"all", showInTable:true, sumInReports:false},
   {id:"profile", label:"Профіль", type:"select", unit:"", options:["Труба","Круг","Квадрат","Шестигранник"], scope:"all", showInTable:true, sumInReports:false},
+  {id:"diam", label:"Діаметр", type:"number", unit:"мм", options:[], scope:"all", showInTable:true, sumInReports:false},
+  {id:"size", label:"Розмір", type:"text", unit:"", options:[], scope:"all", showInTable:true, sumInReports:false},
   {id:"defect", label:"Брак", type:"number", unit:"шт", options:[], scope:"all", showInTable:true, sumInReports:true}
 ]; }
 function defaultMeta(){ return { admin:{name:"Керуючий",pin:""}, managers:[], departments:[], employees:[], notes:[], drawings:[], orders:[], fields:defaultFields(), settings:{features:{week:true,reports:true,orders:true,fields:true,drawings:true,notes:true}} }; }
@@ -383,6 +385,12 @@ function migrate(m){
     ensure({id:"mat",label:"Матеріал",type:"select",unit:"",options:["Сталь","Алюміній","Нержавійка","ПШ","Пластик","Мідь"],scope:"all",showInTable:true,sumInReports:false});
     ensure({id:"profile",label:"Профіль",type:"select",unit:"",options:["Труба","Круг","Квадрат","Шестигранник"],scope:"all",showInTable:true,sumInReports:false});
     m.settings.seededMatProfile=true;
+  }
+  if(!m.settings.seededDim){
+    const ensure2=(fld)=>{ if(!m.fields.some(x=>x.id===fld.id)) m.fields.push(fld); };
+    ensure2({id:"diam",label:"Діаметр",type:"number",unit:"мм",options:[],scope:"all",showInTable:true,sumInReports:false});
+    ensure2({id:"size",label:"Розмір",type:"text",unit:"",options:[],scope:"all",showInTable:true,sumInReports:false});
+    m.settings.seededDim=true;
   }
   const firstDep=(m.departments[0]&&m.departments[0].id)||"";
   m.drawings.forEach(d=>{ if(d.currentDept===undefined){ d.currentDept=(d.departmentId&&d.departmentId!=="all")?d.departmentId:firstDep; } if(!d.status) d.status="waiting"; if(d.finished===undefined) d.finished=false; if(!Array.isArray(d.history)) d.history=d.currentDept?[{deptId:d.currentDept,at:d.createdAt||todayStr()}]:[]; });
@@ -470,7 +478,7 @@ function customInput(fl,f){
   let inp;
   if(fl.type==="select"){ inp=`<select class="select" id="rc-cf-${fl.id}"><option value="">—</option>${(fl.options||[]).map(o=>`<option value="${esc(o)}" ${String(val)===String(o)?"selected":""}>${esc(o)}</option>`).join("")}</select>`; }
   else if(fl.type==="measure"){ const uval=(f&&f.custom&&f.custom[fl.id+"__u"])||((fl.options||[])[0]||""); const uo=(fl.options||[]).map(o=>`<option value="${esc(o)}" ${String(uval)===String(o)?"selected":""}>${esc(o)}</option>`).join(""); inp=`<div class="measure"><input type="number" class="input" id="rc-cf-${fl.id}" value="${esc(val)}" /><select class="select unit-sel" id="rc-cfu-${fl.id}">${uo}</select></div>`; }
-  else if(fl.type==="number"){ inp=`<input type="number" class="input" id="rc-cf-${fl.id}"${fl.id==="cut"?' data-action="rc-calc"':''} value="${esc(val)}" />`; }
+  else if(fl.type==="number"){ inp=`<input type="number" class="input" id="rc-cf-${fl.id}"${(fl.id==="cut"||fl.id==="defect")?' data-action="rc-calc"':''} value="${esc(val)}" />`; }
   else { inp=`<input class="input" id="rc-cf-${fl.id}" value="${esc(val)}" />`; }
   return `<label class="field"><span>${lbl}</span>${inp}</label>`;
 }
@@ -961,6 +969,7 @@ function openRecordModal(editRec, prefill){
         <label class="field"><span>Час виготовлення на 1 шт (хв)</span><input type="number" min="0" class="input" id="rc-min" data-action="rc-calc" value="${esc(f.minutesPerUnit)}" /></label>
         <div id="rc-custom" style="display:contents">${customFieldsHTML(f.departmentId,f)}</div>
         <div class="field"><span>Разом часу</span><div class="total-box mono" id="rc-total">${fmtMinutes(initTotal)}</div></div>
+        <div class="field"><span>Брак, %</span><div class="total-box mono" id="rc-defrate">${(()=>{const d=num((f.custom||{}).defect||0);const q=num(f.qty);const r=(q+d)>0?(d/(q+d)*100):0;return d+" шт · "+r.toFixed(1)+"%";})()}</div></div>
         <label class="field full"><span>Нотатка (необов'язково)</span><input class="input" id="rc-note" value="${esc(f.note||"")}" placeholder="Коментар до роботи" /></label>
       </div>
       <div class="row gap8 mt16 end"><button class="btn btn-ghost" data-action="modal-close">Скасувати</button><button class="btn btn-primary" data-action="rc-save">Зберегти</button></div>
@@ -1146,7 +1155,7 @@ document.addEventListener("change", async (e)=>{
 document.addEventListener("input",(e)=>{
   const t=e.target.closest("[data-action]"); if(!t)return;
   if(t.dataset.action==="f-search"){ state.search=t.value; render(); }
-  if(t.dataset.action==="rc-calc"){ const cutEl=$("rc-cf-cut"); const cut=cutEl?num(cutEl.value):0; const tot=$("rc-total"); if(tot) tot.textContent=fmtMinutes(num($("rc-qty").value)*(num($("rc-min").value)+cut)); }
+  if(t.dataset.action==="rc-calc"){ const cutEl=$("rc-cf-cut"); const cut=cutEl?num(cutEl.value):0; const q=num($("rc-qty").value); const tot=$("rc-total"); if(tot) tot.textContent=fmtMinutes(q*(num($("rc-min").value)+cut)); const dEl=$("rc-cf-defect"); const d=dEl?num(dEl.value):0; const dr=$("rc-defrate"); if(dr) dr.textContent=d+" шт · "+((q+d)>0?(d/(q+d)*100).toFixed(1):"0.0")+"%"; }
   if(t.dataset.action==="rc-order"){ const o=(M().orders||[]).find(x=>String(x.number)===t.value); if(o){ const p=$("rc-product"); if(p) p.value=o.product||""; } }
 });
 
