@@ -261,6 +261,7 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);font-size
 <div id="modal-root"></div>
 <div id="toast-root"></div>
 
+<script src="config.js"></script>
 <script type="module">
 // Firebase підключається динамічно лише коли заповнено firebaseConfig (нижче).
 
@@ -268,14 +269,13 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);font-size
    НАЛАШТУВАННЯ FIREBASE  ——  вставте сюди дані з вашого проєкту Firebase.
    Інструкція — у файлі README.md. Змінюйте лише значення в лапках.
    ========================================================================= */
-const firebaseConfig = {
-  apiKey: "AIzaSyC8tClrXr5drvNCyYVHi_Rxb2U58HZz8mk",
-  authDomain: "oblik-robit.firebaseapp.com",
-  projectId: "oblik-robit",
-  storageBucket: "oblik-robit.firebasestorage.app",
-  messagingSenderId: "226143315819",
-  appId: "1:226143315819:web:6f3e4994824fc4c4fd4e2e",
-  measurementId: "G-WN6KMJZGEW"
+const firebaseConfig = (typeof window!=="undefined" && window.OBLIK_CONFIG) ? window.OBLIK_CONFIG : {
+  apiKey: "ВСТАВТЕ_СЮДИ",
+  authDomain: "ВСТАВТЕ_СЮДИ",
+  projectId: "ВСТАВТЕ_СЮДИ",
+  storageBucket: "ВСТАВТЕ_СЮДИ",
+  messagingSenderId: "ВСТАВТЕ_СЮДИ",
+  appId: "ВСТАВТЕ_СЮДИ"
 };
 /* ========================================================================= */
 
@@ -645,6 +645,7 @@ function todayHTML(){
       <div class="stat"><div class="stat-val mono">${totQty}</div><div class="stat-lbl">деталей за день</div></div>
       <div class="stat"><div class="stat-val mono">${fmtMinutes(totMin)}</div><div class="stat-lbl">час за день</div></div>
       <div class="stat"><div class="stat-val mono">${totDef}</div><div class="stat-lbl">браку</div></div>
+      <div class="stat"><div class="stat-val mono">${(totQty+totDef)>0?(totDef/(totQty+totDef)*100).toFixed(1):0}%</div><div class="stat-lbl">брак від виробітку</div></div>
     </div>
     <div class="emp-grid">${cards}</div>`;
 }
@@ -688,6 +689,7 @@ function journalHTML(){
       <div class="stat"><div class="stat-val mono">${totalQty}</div><div class="stat-lbl">деталей / заготовок</div></div>
       <div class="stat"><div class="stat-val mono">${fmtMinutes(totalMin)}</div><div class="stat-lbl">загальний час</div></div>
       <div class="stat"><div class="stat-val mono">${totalDef}</div><div class="stat-lbl">браку, шт</div></div>
+      <div class="stat"><div class="stat-val mono">${(totalQty+totalDef)>0?(totalDef/(totalQty+totalDef)*100).toFixed(1):0}%</div><div class="stat-lbl">брак від виробітку</div></div>
     </div>
     <div class="filters">
       <select class="select" data-action="f-dept"><option value="all">Усі дільниці</option>${vd.map(d=>`<option value="${d.id}" ${state.filterDept===d.id?"selected":""}>${esc(d.name)}</option>`).join("")}</select>
