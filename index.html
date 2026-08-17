@@ -393,7 +393,7 @@ function migrate(m){
     m.settings.seededDim=true;
   }
   const firstDep=(m.departments[0]&&m.departments[0].id)||"";
-  m.drawings.forEach(d=>{ if(d.currentDept===undefined){ d.currentDept=(d.departmentId&&d.departmentId!=="all")?d.departmentId:firstDep; } if(!d.status) d.status="waiting"; if(d.finished===undefined) d.finished=false; if(!Array.isArray(d.history)) d.history=d.currentDept?[{deptId:d.currentDept,at:d.createdAt||todayStr()}]:[]; });
+  m.drawings.forEach(d=>{ if(d.currentDept===undefined){ d.currentDept=(d.departmentId&&d.departmentId!=="all")?d.departmentId:firstDep; } if(!d.status) d.status="waiting"; if(d.finished===undefined) d.finished=false; if(!Array.isArray(d.history)) d.history=d.currentDept?[{deptId:d.currentDept,at:d.createdAt||todayStr()}]:[]; if(d.isImage===undefined) d.isImage=true; if(!d.fileName) d.fileName=(d.name||"креслення")+".jpg"; });
 }
 
 async function startFirebase(){
@@ -886,9 +886,9 @@ function drawingsHTML(){
   const uploader = admin ? `<div class="card add-card"><div class="form-inline wrap">
       <input class="input grow" id="draw-name" data-live="1" placeholder="Назва креслення" />
       <select class="select" id="draw-target"><option value="">Стартова дільниця…</option>${depts.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join("")}</select>
-      <input type="file" accept="image/*" class="file-input" id="draw-file" data-action="draw-file" />
+      <input type="file" class="file-input" id="draw-file" data-action="draw-file" />
       <label for="draw-file" class="btn btn-primary" id="draw-btn">Обрати файл</label>
-    </div><div class="muted small mt8">Оберіть, з якої дільниці починається робота. Далі керівники передаватимуть креслення по маршруту.</div></div>` : "";
+    </div><div class="muted small mt8">Формати: зображення, PDF, DXF, DWG, STEP, IGES, ZIP, RAR тощо (до ~0.9 МБ). Оберіть стартову дільницю — далі креслення передаватиметься по маршруту.</div></div>` : "";
   const statusBadge=(d)=> d.finished?'<span class="badge on">✓ Маршрут завершено</span>':(d.status==="in_work"?'<span class="badge" style="color:var(--blue-ink)">● В роботі</span>':'<span class="badge off">○ Очікує приймання</span>');
   const routeTrail=(d)=>{ const names=(d.history||[]).map(h=>esc(deptName(h.deptId))); if(!names.length) return ""; return `<div class="route">${names.map((n,i)=>`${i?'<span class="route-arrow">→</span>':''}<span class="${i===names.length-1&&!d.finished?'route-now':''}">${n}</span>`).join("")}</div>`; };
   const otherDepts=(cur)=> depts.filter(x=>x.id!==cur);
@@ -905,10 +905,10 @@ function drawingsHTML(){
     }
     return `<div class="draw-card route-card">
       <div class="draw-row">
-        <button class="draw-thumb sm" data-action="draw-open" data-id="${d.id}"><span class="draw-ico">📐</span><span class="draw-open">Відкрити</span></button>
+        <button class="draw-thumb sm" data-action="draw-open" data-id="${d.id}"><span class="draw-ico">${(d.isImage||/(png|jpe?g|webp|gif)$/i.test(d.fileName||""))?"🖼":"📄"}</span><span class="draw-open">${(d.isImage||/(png|jpe?g|webp|gif)$/i.test(d.fileName||""))?"Відкрити":"Завантажити"}</span></button>
         <div class="draw-meta">
           <div class="draw-name">${esc(d.name)}</div>
-          <div class="draw-sub">Зараз на: <b>${esc(deptName(d.currentDept))||"—"}</b> · ${esc(d.createdAt)}</div>
+          <div class="draw-sub">Зараз на: <b>${esc(deptName(d.currentDept))||"—"}</b> · ${esc(d.createdAt)}${d.fileName&&d.fileName.indexOf(".")>=0?` · ${esc(d.fileName.split(".").pop().toUpperCase())}`:""}</div>
           <div class="mt6">${statusBadge(d)}</div>
         </div>
         ${admin?`<button class="mini danger draw-del" data-action="draw-del" data-id="${d.id}">✕</button>`:""}
@@ -1175,6 +1175,7 @@ function promptPin(name,pin,cb){
 async function storeDrawing(id,dataUrl){ if(mode==="cloud") await fb.setDoc(fb.doc(db,"drawings",id),{data:dataUrl}); else { if(LS_OK) localStorage.setItem(LS_DRAW(id),dataUrl); } }
 async function fetchDrawing(id){ if(mode==="cloud"){ const sp=await fb.getDoc(fb.doc(db,"drawings",id)); return sp.exists()?sp.data().data:null; } return localStorage.getItem(LS_DRAW(id)); }
 async function deleteDrawingData(id){ if(mode==="cloud") await fb.deleteDoc(fb.doc(db,"drawings",id)); else localStorage.removeItem(LS_DRAW(id)); }
+function readFileDataUrl(file){ return new Promise((resolve,reject)=>{ const r=new FileReader(); r.onerror=()=>reject(new Error("read")); r.onload=()=>resolve(r.result); r.readAsDataURL(file); }); }
 async function handleDrawFile(file){
   if(!file) return;
   const name=($("draw-name").value||"").trim();
@@ -1183,24 +1184,31 @@ async function handleDrawFile(file){
   if(!target){ toast("error","Оберіть стартову дільницю"); const fi=$("draw-file"); if(fi)fi.value=""; return; }
   const btn=$("draw-btn"); if(btn){ btn.textContent="Завантаження…"; btn.classList.add("disabled"); }
   try{
-    const dataUrl=await compressImage(file);
-    if(dataUrl.length>900000){ toast("error","Файл завеликий. Візьміть менше зображення."); return; }
+    const isImage=(file.type||"").startsWith("image/");
+    const dataUrl = isImage ? await compressImage(file) : await readFileDataUrl(file);
+    if(dataUrl.length>900000){ toast("error", isImage?"Зображення завелике. Візьміть менше.":"Файл завеликий для хмари (ліміт ~0.9 МБ). Стисніть або запакуйте меншим архівом."); return; }
     const id=uid();
     await storeDrawing(id, dataUrl);
-    await saveMeta(m=>m.drawings.push({ id, name, currentDept:target, status:"waiting", finished:false, history:[{deptId:target,at:todayStr()}], createdAt:todayStr() }));
+    await saveMeta(m=>m.drawings.push({ id, name, fileName:file.name||name, mime:file.type||"", isImage, currentDept:target, status:"waiting", finished:false, history:[{deptId:target,at:todayStr()}], createdAt:todayStr() }));
     toast("ok","Креслення завантажено");
-  }catch(err){ toast("error","Не вдалося завантажити креслення. Підтримуються зображення (jpg, png)."); }
+  }catch(err){ toast("error","Не вдалося завантажити файл."); }
   finally{ const b=$("draw-btn"); if(b){ b.textContent="Обрати файл"; b.classList.remove("disabled"); } const fi=$("draw-file"); if(fi)fi.value=""; }
 }
 async function openDrawing(id){
   const meta=M().drawings.find(d=>d.id===id); if(!meta)return;
   try{
     const src=await fetchDrawing(id);
-    if(!src){ toast("error","Зображення не знайдено"); return; }
-    $("modal-root").innerHTML=`<div class="modal-overlay" data-action="modal-bg"><div class="modal modal-wide">
-      <div class="modal-head"><h3 class="modal-title">${esc(meta.name)}</h3><button class="icon-btn" data-action="modal-close">✕</button></div>
-      <div class="modal-body"><img class="draw-full" src="${src}" alt="${esc(meta.name)}" /><div class="row end mt12"><a class="btn btn-ghost" href="${src}" download="${esc(meta.name)}.jpg">Завантажити</a></div></div></div></div>`;
-  }catch(e){ toast("error","Не вдалося відкрити креслення"); }
+    if(!src){ toast("error","Файл не знайдено"); return; }
+    const isImg = meta.isImage || /^data:image\//.test(src);
+    if(isImg){
+      $("modal-root").innerHTML=`<div class="modal-overlay" data-action="modal-bg"><div class="modal modal-wide">
+        <div class="modal-head"><h3 class="modal-title">${esc(meta.name)}</h3><button class="icon-btn" data-action="modal-close">✕</button></div>
+        <div class="modal-body"><img class="draw-full" src="${src}" alt="${esc(meta.name)}" /><div class="row end mt12"><a class="btn btn-ghost" href="${src}" download="${esc(meta.fileName||(meta.name+".jpg"))}">Завантажити</a></div></div></div></div>`;
+    } else {
+      const a=document.createElement("a"); a.href=src; a.download=meta.fileName||meta.name; document.body.appendChild(a); a.click(); a.remove();
+      toast("ok","Завантаження файлу…");
+    }
+  }catch(e){ toast("error","Не вдалося відкрити файл"); }
 }
 async function deleteDrawing(id){ try{ await deleteDrawingData(id); }catch(e){} await saveMeta(m=>{ m.drawings=m.drawings.filter(x=>x.id!==id); }); }
 
