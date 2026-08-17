@@ -288,6 +288,7 @@ const state = {
   search: "",
   weekStart: startOfWeek(new Date()),
   loginPick: null,
+  showPins: false,
 };
 let db=null, auth=null, chartRegistry=[];
 let mode="local"; const fb={};
@@ -692,8 +693,13 @@ function departmentsHTML(){
 // ---------- Керівники ----------
 function managersHTML(){
   const permTxt=(p)=>{ p=p||{}; const a=[]; if(p.employees)a.push("працівники"); if(p.editRecords)a.push("редагування"); if(p.export)a.push("експорт"); return a.length?a.join(", "):"—"; };
-  const rows=M().managers.map(m=>{const dl=M().departments.filter(d=>(d.managerIds||[]).includes(m.id)).map(d=>esc(d.name)); return `<tr><td>${esc(m.name)}</td><td>${dl.length?dl.join(", "):'<span class="muted">—</span>'}</td><td class="small">${esc(permTxt(m.perms))}</td><td class="num mono">${m.pin?"••••":"—"}</td><td class="actions-cell"><button class="mini" data-action="mgr-edit" data-id="${m.id}">✎</button><button class="mini danger" data-action="mgr-del" data-id="${m.id}">✕</button></td></tr>`;}).join("");
-  return `<h2 class="h2">Керівники дільниць</h2><div class="muted small mb12">У кожного свій кабінет. Права та дільниці налаштовуються кнопкою ✎.</div>
+  const rows=M().managers.map(m=>{const dl=M().departments.filter(d=>(d.managerIds||[]).includes(m.id)).map(d=>esc(d.name)); return `<tr><td>${esc(m.name)}</td><td>${dl.length?dl.join(", "):'<span class="muted">—</span>'}</td><td class="small">${esc(permTxt(m.perms))}</td><td class="num mono">${m.pin?(state.showPins?esc(m.pin):"••••"):"—"}</td><td class="actions-cell"><button class="mini" data-action="mgr-edit" data-id="${m.id}">✎</button><button class="mini danger" data-action="mgr-del" data-id="${m.id}">✕</button></td></tr>`;}).join("");
+  return `<div class="section-head"><div><h2 class="h2">Керівники дільниць</h2><div class="muted small">У кожного свій кабінет. Права та дільниці налаштовуються кнопкою ✎.</div></div><button class="btn btn-ghost sm" data-action="toggle-pins">${state.showPins?"Приховати PIN":"Показати PIN"}</button></div>
+    <div class="card add-card"><div class="muted small mb8" style="font-weight:600">Кабінет керуючого</div><div class="form-inline">
+      <input class="input grow" id="adm-name" value="${esc(M().admin.name||"")}" placeholder="Назва кабінету керуючого" />
+      <input class="input pin-sm" id="adm-pin" inputmode="numeric" value="${esc(M().admin.pin||"")}" placeholder="PIN" />
+      <button class="btn btn-primary" data-action="admin-save">Зберегти</button>
+    </div><div class="muted small mt8">PIN необов'язковий. Залиште порожнім, щоб входити без коду.</div></div>
     <div class="card add-card"><div class="form-inline">
       <input class="input grow" id="mgr-name" data-live="1" placeholder="Ім'я керівника" />
       <input class="input pin-sm" id="mgr-pin" inputmode="numeric" placeholder="PIN" />
@@ -859,6 +865,8 @@ document.addEventListener("click", async (e)=>{
   if(a==="theme"){ state.theme = state.theme==="dark"?"light":"dark"; try{localStorage.setItem("uchet_theme",state.theme);}catch(e){} applyTheme(); render(); return; }
 
   if(a==="setup-admin"){ const name=($("su-name").value||"").trim(); const pin=($("su-pin").value||"").replace(/\D/g,"").slice(0,4); saveMeta(m=>{ m.admin={name:name||"Керуючий",pin,setup:true}; }); return; }
+  if(a==="admin-save"){ const name=($("adm-name").value||"").trim(); const pin=($("adm-pin").value||"").replace(/\D/g,"").slice(0,4); saveMeta(m=>{ m.admin.name=name||"Керуючий"; m.admin.pin=pin; m.admin.setup=true; }); toast("ok","Кабінет керуючого збережено"); return; }
+  if(a==="toggle-pins"){ state.showPins=!state.showPins; render(); return; }
 
   if(a==="pick"){
     const role=t.dataset.role, id=t.dataset.id||"";
