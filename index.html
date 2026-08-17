@@ -130,7 +130,12 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);font-size
 
 .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;}
 .add-card{margin-bottom:16px;}
-.clock{font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--muted);white-space:nowrap;letter-spacing:.2px;}
+.clock{font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--text);white-space:nowrap;letter-spacing:.2px;background:var(--surface);border:1px solid var(--line);padding:6px 11px;border-radius:999px;}
+.chips{display:flex;flex-wrap:wrap;gap:7px;}
+.chip{display:inline-block;padding:5px 11px;border:1px solid var(--line);border-radius:999px;font-size:13px;background:var(--surface);}
+.badge{font-weight:700;font-size:13px;}
+.badge.on{color:#16a34a;}
+.badge.off{color:var(--muted);}
 .cards2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
 .card-h{font-weight:700;font-size:15px;margin-bottom:12px;}
 .switch-list{display:flex;flex-direction:column;}
@@ -504,7 +509,7 @@ function workspaceHTML(){
     if(on("fields")) tabs.push(["fields","Поля"]);
     if(on("drawings")) tabs.push(["drawings","Креслення"]);
     if(on("notes")) tabs.push(["notes","Нотатки"]);
-    tabs.push(["export","Експорт"],["settings","Налаштування"]);
+    tabs.push(["export","Експорт"],["settings","Мій кабінет"]);
   } else {
     tabs=[["journal","Журнал"]];
     if(on("week")) tabs.push(["week","Тиждень"]);
@@ -513,6 +518,7 @@ function workspaceHTML(){
     if(on("drawings")) tabs.push(["drawings","Креслення"]);
     if(on("notes")) tabs.push(["notes","Нотатки"]);
     if(P.export) tabs.push(["export","Експорт"]);
+    tabs.push(["settings","Мій кабінет"]);
   }
   const showMonth = !["notes","managers","departments","orders","fields","settings"].includes(state.view);
 
@@ -525,7 +531,7 @@ function workspaceHTML(){
   else if(state.view==="managers"&&admin) body=managersHTML();
   else if(state.view==="orders"&&admin) body=ordersHTML();
   else if(state.view==="fields"&&admin) body=fieldsHTML();
-  else if(state.view==="settings"&&admin) body=settingsHTML();
+  else if(state.view==="settings") body= admin? settingsHTML() : profileHTML();
   else if(state.view==="drawings") body=drawingsHTML();
   else if(state.view==="notes") body=notesHTML();
   else if(state.view==="export" && (admin||P.export)) body=exportHTML();
@@ -734,11 +740,35 @@ function managersHTML(){
     ${M().managers.length===0?'<div class="empty small">Керівників поки немає.</div>':`<div class="table-wrap"><table class="table"><thead><tr><th>Ім'я</th><th>Дільниці</th><th>Права</th><th class="num">PIN</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`}`;
 }
 
+function profileHTML(){
+  const mg=M().managers.find(x=>x.id===(state.session&&state.session.managerId));
+  if(!mg) return `<div class="empty">Кабінет не знайдено.</div>`;
+  const p=mg.perms||{};
+  const depts=M().departments.filter(d=>(d.managerIds||[]).includes(mg.id)).map(d=>esc(d.name));
+  const permList=[["Вести працівників",p.employees],["Редагувати записи",p.editRecords],["Вивантаження в Excel",p.export]];
+  return `<div class="section-head"><div><h2 class="h2">Мій кабінет</h2><div class="muted small">Ваш профіль керівника дільниці</div></div></div>
+    <div class="cards2">
+      <div class="card">
+        <div class="card-h">Мої дані</div>
+        <label class="field mb12"><span>Ім'я</span><input class="input" id="me-name" value="${esc(mg.name)}"/></label>
+        <label class="field mb12"><span>Мій PIN для входу</span><input class="input" id="me-pin" inputmode="numeric" value="${esc(mg.pin||"")}" placeholder="4 цифри"/></label>
+        <div class="muted small mb12">PIN — ваш код входу в кабінет. Залиште порожнім, щоб входити без коду.</div>
+        <div class="row end"><button class="btn btn-primary" data-action="me-save">Зберегти</button></div>
+      </div>
+      <div class="card">
+        <div class="card-h">Мої дільниці</div>
+        ${depts.length?`<div class="chips">${depts.map(d=>`<span class="chip">${d}</span>`).join("")}</div>`:'<div class="muted small">Дільниці ще не призначено. Зверніться до керуючого.</div>'}
+        <div class="card-h" style="margin-top:18px">Мої права</div>
+        <div class="switch-list">${permList.map(([l,v])=>`<div class="switch-row"><span>${l}</span><span class="badge ${v?'on':'off'}">${v?'✓ є':'—'}</span></div>`).join("")}</div>
+        <div class="muted small mt12">Права та дільниці налаштовує керуючий.</div>
+      </div>
+    </div>`;
+}
 function settingsHTML(){
   const F=(M().settings&&M().settings.features)||{}; const on=(k)=>F[k]!==false;
   const feats=[["week","Тиждень"],["reports","Звіти"],["orders","Замовлення"],["fields","Поля"],["drawings","Креслення"],["notes","Нотатки"]];
   const featRows=feats.map(([k,l])=>`<label class="switch-row"><span>${l}</span><input type="checkbox" data-action="feat-toggle" data-key="${k}" ${on(k)?"checked":""}/></label>`).join("");
-  return `<div class="section-head"><div><h2 class="h2">Налаштування</h2><div class="muted small">Особистий кабінет керуючого та функції застосунку</div></div></div>
+  return `<div class="section-head"><div><h2 class="h2">Мій кабінет</h2><div class="muted small">Кабінет керуючого · налаштування застосунку</div></div></div>
     <div class="cards2">
       <div class="card">
         <div class="card-h">Кабінет керуючого</div>
@@ -918,6 +948,7 @@ document.addEventListener("click", async (e)=>{
 
   if(a==="setup-admin"){ const name=($("su-name").value||"").trim(); const pin=($("su-pin").value||"").replace(/\D/g,"").slice(0,4); saveMeta(m=>{ m.admin={name:name||"Керуючий",pin,setup:true}; }); return; }
   if(a==="admin-save"){ const name=($("adm-name").value||"").trim(); const pin=($("adm-pin").value||"").replace(/\D/g,"").slice(0,4); saveMeta(m=>{ m.admin.name=name||"Керуючий"; m.admin.pin=pin; m.admin.setup=true; }); toast("ok","Кабінет керуючого збережено"); return; }
+  if(a==="me-save"){ const id=state.session&&state.session.managerId; const name=($("me-name").value||"").trim(); const pin=($("me-pin").value||"").replace(/\D/g,"").slice(0,4); saveMeta(m=>{ const mg=m.managers.find(x=>x.id===id); if(mg){ if(name)mg.name=name; mg.pin=pin; } }); toast("ok","Збережено"); return; }
   if(a==="toggle-pins"){ state.showPins=!state.showPins; render(); return; }
 
   if(a==="pick"){
