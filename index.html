@@ -204,6 +204,8 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);font-size
 .mt6{margin-top:6px;}
 .board-bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px;}
 .board-bar .select{width:auto;min-width:220px;max-width:340px;flex:0 0 auto;}
+.month-pick{position:relative;cursor:pointer;user-select:none;}
+.month-pick input{position:absolute;left:0;top:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0;margin:0;}
 .board-bar .input{width:auto;}
 .date-nav{display:flex;align-items:center;gap:6px;}
 .date-nav .input{width:auto;}
@@ -367,6 +369,9 @@ function defaultFields(){ return [
   {id:"unit", label:"Одиниця виміру", type:"select", unit:"", options:["шт","кг","м","м²","компл."], scope:"all", showInTable:false, sumInReports:false},
   {id:"cut", label:"Час порізки на 1 шт", type:"number", unit:"хв", options:[], scope:"all", showInTable:false, sumInReports:false},
   {id:"material", label:"Витрата матеріалу", type:"measure", unit:"", options:["м","кг"], scope:"all", showInTable:true, sumInReports:false},
+  {id:"len", label:"Довжина заготовки", type:"number", unit:"мм", options:[], scope:"all", showInTable:false, sumInReports:false},
+  {id:"kerf", label:"Припуск на порізку (пила)", type:"number", unit:"мм", options:[], scope:"all", showInTable:false, sumInReports:false},
+  {id:"twall", label:"Товщина стінки (труба)", type:"number", unit:"мм", options:[], scope:"all", showInTable:false, sumInReports:false},
   {id:"mat", label:"Матеріал", type:"select", unit:"", options:["Сталь","Алюміній","Нержавійка","ПШ","Пластик","Мідь"], scope:"all", showInTable:true, sumInReports:false},
   {id:"profile", label:"Профіль", type:"select", unit:"", options:["Труба","Круг","Квадрат","Шестигранник"], scope:"all", showInTable:true, sumInReports:false},
   {id:"diam", label:"Діаметр", type:"number", unit:"мм", options:[], scope:"all", showInTable:true, sumInReports:false},
@@ -393,6 +398,16 @@ function migrate(m){
     ensure2({id:"diam",label:"Діаметр",type:"number",unit:"мм",options:[],scope:"all",showInTable:true,sumInReports:false});
     ensure2({id:"size",label:"Розмір",type:"text",unit:"",options:[],scope:"all",showInTable:true,sumInReports:false});
     m.settings.seededDim=true;
+  }
+  if(!m.settings.seededLen){
+    const e3=(fld)=>{ if(!m.fields.some(x=>x.id===fld.id)) m.fields.push(fld); };
+    e3({id:"len",label:"Довжина заготовки",type:"number",unit:"мм",options:[],scope:"all",showInTable:false,sumInReports:false});
+    e3({id:"kerf",label:"Припуск на порізку (пила)",type:"number",unit:"мм",options:[],scope:"all",showInTable:false,sumInReports:false});
+    m.settings.seededLen=true;
+  }
+  if(!m.settings.seededTwall){
+    if(!m.fields.some(x=>x.id==="twall")) m.fields.push({id:"twall",label:"Товщина стінки (труба)",type:"number",unit:"мм",options:[],scope:"all",showInTable:false,sumInReports:false});
+    m.settings.seededTwall=true;
   }
   const firstDep=(m.departments[0]&&m.departments[0].id)||"";
   m.drawings.forEach(d=>{ if(d.currentDept===undefined){ d.currentDept=(d.departmentId&&d.departmentId!=="all")?d.departmentId:firstDep; } if(!d.status) d.status="waiting"; if(d.finished===undefined) d.finished=false; if(!Array.isArray(d.history)) d.history=d.currentDept?[{deptId:d.currentDept,at:d.createdAt||todayStr()}]:[]; if(d.isImage===undefined) d.isImage=true; if(!d.fileName) d.fileName=(d.name||"креслення")+".jpg"; });
@@ -478,9 +493,9 @@ function customInput(fl,f){
   const val = (f&&f.custom&&f.custom[fl.id]!=null)?f.custom[fl.id]:"";
   const lbl = esc(fl.label)+((fl.unit&&fl.type!=="measure")?` (${esc(fl.unit)})`:"");
   let inp;
-  if(fl.type==="select"){ inp=`<select class="select" id="rc-cf-${fl.id}"><option value="">—</option>${(fl.options||[]).map(o=>`<option value="${esc(o)}" ${String(val)===String(o)?"selected":""}>${esc(o)}</option>`).join("")}</select>`; }
-  else if(fl.type==="measure"){ const uval=(f&&f.custom&&f.custom[fl.id+"__u"])||((fl.options||[])[0]||""); const uo=(fl.options||[]).map(o=>`<option value="${esc(o)}" ${String(uval)===String(o)?"selected":""}>${esc(o)}</option>`).join(""); inp=`<div class="measure"><input type="number" class="input" id="rc-cf-${fl.id}" value="${esc(val)}" /><select class="select unit-sel" id="rc-cfu-${fl.id}">${uo}</select></div>`; }
-  else if(fl.type==="number"){ inp=`<input type="number" class="input" id="rc-cf-${fl.id}"${(fl.id==="cut"||fl.id==="defect")?' data-action="rc-calc"':''} value="${esc(val)}" />`; }
+  if(fl.type==="select"){ inp=`<select class="select"${(fl.id==="mat"||fl.id==="profile")?' data-action="rc-selcalc"':''} id="rc-cf-${fl.id}"><option value="">—</option>${(fl.options||[]).map(o=>`<option value="${esc(o)}" ${String(val)===String(o)?"selected":""}>${esc(o)}</option>`).join("")}</select>`; }
+  else if(fl.type==="measure"){ const uval=(f&&f.custom&&f.custom[fl.id+"__u"])||((fl.options||[])[0]||""); const uo=(fl.options||[]).map(o=>`<option value="${esc(o)}" ${String(uval)===String(o)?"selected":""}>${esc(o)}</option>`).join(""); inp=`<div class="measure"><input type="number" class="input" id="rc-cf-${fl.id}" value="${esc(val)}" /><select class="select unit-sel" data-action="rc-measunit" id="rc-cfu-${fl.id}">${uo}</select></div>`; }
+  else if(fl.type==="number"){ inp=`<input type="number" class="input" id="rc-cf-${fl.id}"${(fl.id==="cut"||fl.id==="defect"||fl.id==="len"||fl.id==="kerf"||fl.id==="diam"||fl.id==="twall")?' data-action="rc-calc"':''} value="${esc(val)}" />`; }
   else { inp=`<input class="input" id="rc-cf-${fl.id}" value="${esc(val)}" />`; }
   return `<label class="field"><span>${lbl}</span>${inp}</label>`;
 }
@@ -607,7 +622,7 @@ function workspaceHTML(){
     <nav class="tabs">${tabs.map(([k,l])=>`<button class="tab ${state.view===k?"tab-active":""}" data-action="tab" data-view="${k}">${l}</button>`).join("")}</nav>
     ${showMonth?`<div class="monthbar">
       <button class="icon-btn" data-action="month" data-d="-1">‹</button>
-      <div class="month-label">${monthLabel(state.month)}</div>
+      <label class="month-label month-pick" title="Оберіть місяць">${monthLabel(state.month)}<input type="month" data-action="month-pick" value="${state.month}" /></label>
       <button class="icon-btn" data-action="month" data-d="1">›</button>
       ${state.month!==currentMonth()?'<button class="btn btn-ghost sm" data-action="month-now">Поточний місяць</button>':''}
     </div>`:""}
@@ -621,7 +636,7 @@ function monthRecords(){
     .filter(r=>vis.has(r.departmentId) && monthOf(r.date)===state.month)
     .filter(r=>state.filterDept==="all"||r.departmentId===state.filterDept)
     .filter(r=>state.filterEmp==="all"||r.employeeId===state.filterEmp)
-    .filter(r=>{ if(!state.search)return true; const q=state.search.toLowerCase(); return (r.task||"").toLowerCase().includes(q)||empName(r.employeeId).toLowerCase().includes(q); })
+    .filter(r=>{ if(!state.search)return true; const q=state.search.toLowerCase(); return (r.task||"").toLowerCase().includes(q)||empName(r.employeeId).toLowerCase().includes(q)||(r.product||"").toLowerCase().includes(q)||String(r.orderNo||"").toLowerCase().includes(q); })
     .sort((a,b)=> a.date<b.date?1:a.date>b.date?-1:0);
 }
 function todayHTML(){
@@ -668,7 +683,8 @@ function journalHTML(){
   const totalQty=recs.reduce((s,r)=>s+num(r.qty),0);
   const totalMin=recs.reduce((s,r)=>s+recTotalMin(r),0);
   const totalDef=recs.reduce((s,r)=>s+recDefect(r),0);
-  const empOpts=M().employees.filter(e=>visibleDeptIdSet().has(e.departmentId));
+  const empScope = state.filterDept==="all" ? visibleDeptIdSet() : new Set([state.filterDept]);
+  const empOpts=M().employees.filter(e=>empScope.has(e.departmentId));
   const tblFields=(M().fields||[]).filter(fl=>fl.showInTable);
   const th=tblFields.map(fl=>`<th class="num">${esc(fl.label)}</th>`).join("");
   const rows=recs.map(r=>{
@@ -950,6 +966,19 @@ function exportHTML(){
 // =========================================================================
 // МОДАЛКА записи
 // =========================================================================
+function densityOf(mat){ const m={"Сталь":7850,"Нержавійка":7900,"Нерж":7900,"Алюміній":2700,"Алюм":2700,"Мідь":8960,"Пластик":1200,"ПШ":7850}; return m[mat]||0; }
+function areaMm2(prof,d,tw){ if(!(d>0))return 0; if(prof==="Круг")return Math.PI*d*d/4; if(prof==="Квадрат")return d*d; if(prof==="Шестигранник")return Math.sqrt(3)/2*d*d; if(prof==="Труба"){ if(tw>0&&d>2*tw) return Math.PI/4*(d*d-(d-2*tw)*(d-2*tw)); return 0; } return 0; }
+function updateModalCalcs(){
+  const qEl=$("rc-qty"); if(!qEl) return; const q=num(qEl.value);
+  const cutEl=$("rc-cf-cut"); const cut=cutEl?num(cutEl.value):0;
+  const minEl=$("rc-min"); const tot=$("rc-total"); if(tot) tot.textContent=fmtMinutes(q*((minEl?num(minEl.value):0)+cut));
+  const dEl=$("rc-cf-defect"); const d=dEl?num(dEl.value):0; const dr=$("rc-defrate"); if(dr) dr.textContent=d+" шт · "+((q+d)>0?(d/(q+d)*100).toFixed(1):"0.0")+"%";
+  const lenEl=$("rc-cf-len"), kerfEl=$("rc-cf-kerf"), matEl=$("rc-cf-material"), matU=$("rc-cfu-material");
+  if(lenEl&&matEl&&matU){ const len=num(lenEl.value); const kerf=kerfEl?num(kerfEl.value):0;
+    if(matU.value==="м"){ if(len>0) matEl.value=Math.round((len+kerf)*q/1000*1000)/1000; }
+    else if(matU.value==="кг"){ const mat=($("rc-cf-mat")||{}).value||""; const prof=($("rc-cf-profile")||{}).value||""; const dia=num(($("rc-cf-diam")||{}).value||0); const tw=num(($("rc-cf-twall")||{}).value||0); const dens=densityOf(mat); const A=areaMm2(prof,dia,tw); if(len>0&&dens>0&&A>0) matEl.value=Math.round(A*(len+kerf)*q*dens/1e9*1000)/1000; }
+  }
+}
 function openRecordModal(editRec, prefill){
   const vd=visibleDepts();
   const f = editRec || Object.assign({ id:"", date: monthOf(todayStr())===state.month?todayStr():state.month+"-01", departmentId: vd.length===1?vd[0].id:"", employeeId:"", orderNo:"", product:"", task:"", qty:1, minutesPerUnit:0, note:"", custom:{} }, prefill||{});
@@ -981,15 +1010,11 @@ function openRecordModal(editRec, prefill){
 function closeModal(){ $("modal-root").innerHTML=""; }
 
 function ordersHTML(){
-  const rows=M().orders.map(o=>`<tr><td class="mono">${esc(o.number)}</td><td>${esc(o.product||"")}</td><td class="actions-cell"><button class="mini" data-action="order-edit" data-id="${o.id}">✎</button><button class="mini danger" data-action="order-del" data-id="${o.id}">✕</button></td></tr>`).join("");
-  return `<h2 class="h2">Замовлення</h2><div class="muted small mb12">Список замовлень (№ і виріб). Начальники зможуть обрати замовлення зі списку або вписати своє.</div>
-    <div class="card add-card"><div class="form-inline">
-      <input class="input" id="order-num" data-live="1" placeholder="Номер замовлення" style="max-width:220px"/>
-      <input class="input grow" id="order-prod" data-live="1" placeholder="Назва виробу"/>
-      <button class="btn btn-primary" data-action="order-add">Додати</button>
-    </div></div>
-    ${M().orders.length===0?'<div class="empty small">Замовлень поки немає.</div>':`<div class="table-wrap"><table class="table"><thead><tr><th>Номер</th><th>Виріб</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`}`;
+  const rows=M().orders.map(o=>`<tr><td class="mono">${esc(o.number)}</td><td>${esc(o.product||"")}</td><td class="num mono">${(o.qty!==""&&o.qty!=null)?esc(o.qty):""}</td><td>${esc(o.material||"")}</td><td>${esc(o.profile||"")}${o.diameter?` ⌀${esc(o.diameter)}`:""}${o.size?` · ${esc(o.size)}`:""}</td><td class="mono">${esc(o.due||"")}</td><td class="actions-cell"><button class="mini" data-action="order-edit" data-id="${o.id}">✎</button><button class="mini danger" data-action="order-del" data-id="${o.id}">✕</button></td></tr>`).join("");
+  return `<div class="section-head"><div><h2 class="h2">Замовлення</h2><div class="muted small">Повна інформація по замовленню. Начальник обере його в записі — дані підставляться автоматично.</div></div><button class="btn btn-primary" data-action="order-new">+ Додати замовлення</button></div>
+    ${M().orders.length===0?'<div class="empty small">Замовлень поки немає.</div>':`<div class="table-wrap"><table class="table"><thead><tr><th>Номер</th><th>Виріб</th><th class="num">К-сть</th><th>Матеріал</th><th>Профіль / розмір</th><th>Термін</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`}`;
 }
+
 function fieldsHTML(){
   const typeLbl={text:"Текст",number:"Число",select:"Список"};
   const scopeLbl=(fl)=> fl.scope==="all"?"Усі":(Array.isArray(fl.scope)?(fl.scope.map(deptName).join(", ")||"—"):"—");
@@ -1024,6 +1049,29 @@ function openManagerModal(id){
         <label class="chk"><input type="checkbox" id="mm-exp" ${p.export?"checked":""}/> Вивантаження в Excel</label>
       </div>
       <div class="row gap8 mt16 end"><button class="btn btn-ghost" data-action="modal-close">Скасувати</button><button class="btn btn-primary" data-action="mgr-save">Зберегти</button></div>
+    </div></div></div>`;
+}
+function fieldOpts(id){ const fl=(M().fields||[]).find(x=>x.id===id); if(fl&&fl.options&&fl.options.length) return fl.options; if(id==="mat") return ["Сталь","Алюміній","Нержавійка","ПШ","Пластик","Мідь"]; if(id==="profile") return ["Труба","Круг","Квадрат","Шестигранник"]; return []; }
+function openOrderModal(id){
+  const o = id? M().orders.find(x=>x.id===id) : {id:"",number:"",product:"",qty:"",material:"",profile:"",diameter:"",size:"",due:"",note:""};
+  if(!o) return;
+  const opt=(arr,val)=>`<option value="">—</option>`+arr.map(x=>`<option value="${esc(x)}" ${String(val)===String(x)?"selected":""}>${esc(x)}</option>`).join("");
+  $("modal-root").innerHTML=`<div class="modal-overlay" data-action="modal-bg"><div class="modal modal-wide">
+    <div class="modal-head"><h3 class="modal-title">${id?"Змінити замовлення":"Нове замовлення"}</h3><button class="icon-btn" data-action="modal-close">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="or-id" value="${esc(o.id)}"/>
+      <div class="form-grid">
+        <label class="field"><span>Номер замовлення</span><input class="input" id="or-number" value="${esc(o.number)}" placeholder="Напр.: 333"/></label>
+        <label class="field"><span>Термін виконання</span><input type="date" class="input" id="or-due" value="${esc(o.due||"")}"/></label>
+        <label class="field full"><span>Назва виробу</span><input class="input" id="or-product" value="${esc(o.product||"")}" placeholder="Що виготовляємо"/></label>
+        <label class="field"><span>Кількість</span><input type="number" min="0" class="input" id="or-qty" value="${esc(o.qty!=null?o.qty:"")}"/></label>
+        <label class="field"><span>Матеріал</span><select class="select" id="or-material">${opt(fieldOpts("mat"),o.material)}</select></label>
+        <label class="field"><span>Профіль</span><select class="select" id="or-profile">${opt(fieldOpts("profile"),o.profile)}</select></label>
+        <label class="field"><span>Діаметр (мм)</span><input type="number" class="input" id="or-diameter" value="${esc(o.diameter||"")}"/></label>
+        <label class="field full"><span>Розміри</span><input class="input" id="or-size" value="${esc(o.size||"")}" placeholder="Напр.: 40×40, L=6000"/></label>
+        <label class="field full"><span>Примітка / вимоги до виробництва</span><input class="input" id="or-note" value="${esc(o.note||"")}" placeholder="Будь-яка додаткова інформація для виробництва"/></label>
+      </div>
+      <div class="row gap8 mt16 end"><button class="btn btn-ghost" data-action="modal-close">Скасувати</button><button class="btn btn-primary" data-action="order-save">Зберегти</button></div>
     </div></div></div>`;
 }
 function openFieldModal(id){
@@ -1115,8 +1163,9 @@ document.addEventListener("click", async (e)=>{
   if(a==="dept-save"){ const id=$("dm-id").value; const name=($("dm-name").value||"").trim(); const ids=[...document.querySelectorAll(".dept-mgr-chk:checked")].map(x=>x.value); saveMeta(m=>{ const d=m.departments.find(x=>x.id===id); if(d){ if(name)d.name=name; d.managerIds=ids; } }); closeModal(); return; }
   if(a==="mgr-edit"){ openManagerModal(t.dataset.id); return; }
   if(a==="mgr-save"){ const id=$("mm-id").value; const name=($("mm-name").value||"").trim(); const pin=($("mm-pin").value||"").replace(/\D/g,"").slice(0,4); const perms={ employees:$("mm-emp").checked, editRecords:$("mm-edit").checked, export:$("mm-exp").checked }; saveMeta(m=>{ const mg=m.managers.find(x=>x.id===id); if(mg){ if(name)mg.name=name; mg.pin=pin; mg.perms=perms; } }); closeModal(); return; }
-  if(a==="order-add"){ const number=($("order-num").value||"").trim(); const product=($("order-prod").value||"").trim(); if(!number){ toast("error","Введіть номер замовлення"); return; } saveMeta(m=>m.orders.push({id:uid(),number,product})); toast("ok","Замовлення додано"); return; }
-  if(a==="order-edit"){ const o=M().orders.find(x=>x.id===t.dataset.id); if(!o)return; const number=prompt("Номер замовлення:",o.number); if(number===null)return; const product=prompt("Назва виробу:",o.product||""); saveMeta(m=>{ const x=m.orders.find(y=>y.id===o.id); if(x){ x.number=(number||"").trim()||x.number; x.product=(product||"").trim(); } }); return; }
+  if(a==="order-new"){ openOrderModal(""); return; }
+  if(a==="order-save"){ const id=$("or-id").value; const number=($("or-number").value||"").trim(); if(!number){ toast("error","Введіть номер замовлення"); return; } const data={ number, product:($("or-product").value||"").trim(), qty:($("or-qty").value===""?"":num($("or-qty").value)), material:$("or-material").value, profile:$("or-profile").value, diameter:($("or-diameter").value||"").trim(), size:($("or-size").value||"").trim(), due:$("or-due").value||"", note:($("or-note").value||"").trim() }; saveMeta(m=>{ if(id){ const x=m.orders.find(y=>y.id===id); if(x) Object.assign(x,data); } else { m.orders.push(Object.assign({id:uid()},data)); } }); closeModal(); toast("ok","Замовлення збережено"); return; }
+  if(a==="order-edit"){ openOrderModal(t.dataset.id); return; }
   if(a==="order-del"){ if(confirm("Видалити замовлення?")) saveMeta(m=>{ m.orders=m.orders.filter(x=>x.id!==t.dataset.id); }); return; }
   if(a==="field-new"){ openFieldModal(""); return; }
   if(a==="field-edit"){ openFieldModal(t.dataset.id); return; }
@@ -1147,18 +1196,21 @@ document.addEventListener("click", async (e)=>{
 document.addEventListener("change", async (e)=>{
   const t=e.target.closest("[data-action]"); if(!t) return;
   const a=t.dataset.action;
+  if(a==="month-pick"){ if(t.value){ state.month=t.value; } render(); return; }
   if(a==="f-dept"){ state.filterDept=t.value; state.filterEmp="all"; render(); return; }
   if(a==="f-emp"){ state.filterEmp=t.value; render(); return; }
   if(a==="rc-dept"){ const dep=t.value; const sel=$("rc-emp"); if(sel){ sel.innerHTML = `<option value="">${dep?"— оберіть —":"спочатку дільниця"}</option>` + M().employees.filter(x=>x.departmentId===dep).map(x=>`<option value="${x.id}">${esc(x.fio)}</option>`).join(""); } const cc=$("rc-custom"); if(cc) cc.innerHTML=customFieldsHTML(dep,null); const tot=$("rc-total"); if(tot) tot.textContent=fmtMinutes(num($("rc-qty").value)*num($("rc-min").value)); return; }
   if(a==="feat-toggle"){ const k=t.dataset.key; const val=t.checked; saveMeta(m=>{ m.settings=m.settings||{}; m.settings.features=m.settings.features||{}; m.settings.features[k]=val; }); return; }
+  if(a==="rc-measunit"){ updateModalCalcs(); return; }
+  if(a==="rc-selcalc"){ updateModalCalcs(); return; }
   if(a==="draw-file"){ handleDrawFile(t.files&&t.files[0]); return; }
 });
 // поиск и пересчёт (input)
 document.addEventListener("input",(e)=>{
   const t=e.target.closest("[data-action]"); if(!t)return;
-  if(t.dataset.action==="f-search"){ state.search=t.value; render(); }
-  if(t.dataset.action==="rc-calc"){ const cutEl=$("rc-cf-cut"); const cut=cutEl?num(cutEl.value):0; const q=num($("rc-qty").value); const tot=$("rc-total"); if(tot) tot.textContent=fmtMinutes(q*(num($("rc-min").value)+cut)); const dEl=$("rc-cf-defect"); const d=dEl?num(dEl.value):0; const dr=$("rc-defrate"); if(dr) dr.textContent=d+" шт · "+((q+d)>0?(d/(q+d)*100).toFixed(1):"0.0")+"%"; }
-  if(t.dataset.action==="rc-order"){ const o=(M().orders||[]).find(x=>String(x.number)===t.value); if(o){ const p=$("rc-product"); if(p) p.value=o.product||""; } }
+  if(t.dataset.action==="f-search"){ state.search=t.value; render(); const el=document.querySelector('[data-action="f-search"]'); if(el){ el.focus(); try{ const L=el.value.length; el.setSelectionRange(L,L); }catch(_){} } }
+  if(t.dataset.action==="rc-calc"){ updateModalCalcs(); }
+  if(t.dataset.action==="rc-order"){ const o=(M().orders||[]).find(x=>String(x.number)===t.value); if(o){ const p=$("rc-product"); if(p) p.value=o.product||""; const setcf=(fid,val)=>{ const el=$("rc-cf-"+fid); if(el&&val!==undefined&&val!=="") el.value=val; }; setcf("mat",o.material); setcf("profile",o.profile); setcf("diam",o.diameter); setcf("size",o.size); } }
 });
 
 // ---------- ПИН модалка ----------
