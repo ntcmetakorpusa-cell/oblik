@@ -484,6 +484,8 @@ function isAdmin(){ return state.session && state.session.role==="admin"; }
 function visibleDepts(){ if(isAdmin()) return M().departments; return M().departments.filter(d=> (d.managerIds||[]).includes(state.session.managerId)); }
 function myPerms(){ if(isAdmin()) return {employees:true,editRecords:true,export:true}; const mg=M().managers.find(x=>x.id===state.session.managerId); return (mg&&mg.perms)||{employees:false,editRecords:false,export:false}; }
 function fieldsFor(deptId){ return (M().fields||[]).filter(fl=> fl.scope==="all" || (Array.isArray(fl.scope)&&fl.scope.includes(deptId)) ); }
+function fieldAppliesToDept(fl,deptId){ return fl.scope==="all" || (Array.isArray(fl.scope)&&fl.scope.includes(deptId)); }
+function setFieldDept(fl,deptId,on,allDeptIds){ let cur = fl.scope==="all" ? allDeptIds.slice() : (Array.isArray(fl.scope)?fl.scope.slice():[]); if(on){ if(!cur.includes(deptId)) cur.push(deptId); } else { cur=cur.filter(x=>x!==deptId); } if(allDeptIds.length && allDeptIds.every(id=>cur.includes(id))) fl.scope="all"; else fl.scope=cur; }
 function orderLabel(o){ if(!o) return ""; const n=o.number?("№ "+o.number):""; const sep=(o.number&&o.product)?" — ":""; return n+sep+(o.product||""); }
 function visibleDeptIdSet(){ return new Set(visibleDepts().map(d=>d.id)); }
 function recTotalMin(r){ return num(r.qty)*(num(r.minutesPerUnit)+num((r.custom||{}).cut||0)); }
@@ -1026,12 +1028,17 @@ function fieldsHTML(){
 function openDeptModal(id){
   const d=M().departments.find(x=>x.id===id); if(!d) return;
   const checks=M().managers.map(m=>`<label class="chk"><input type="checkbox" class="dept-mgr-chk" value="${m.id}" ${(d.managerIds||[]).includes(m.id)?"checked":""}/> ${esc(m.name)}</label>`).join("")||'<div class="muted small">Керівників ще немає.</div>';
-  $("modal-root").innerHTML=`<div class="modal-overlay" data-action="modal-bg"><div class="modal">
+  const fieldChecks=(M().fields||[]).map(fl=>`<label class="chk"><input type="checkbox" class="dept-fld-chk" value="${fl.id}" ${fieldAppliesToDept(fl,d.id)?"checked":""}/> ${esc(fl.label)}${fl.unit?` <span class="muted">(${esc(fl.unit)})</span>`:""}</label>`).join("")||'<div class="muted small">Полів ще немає.</div>';
+  $("modal-root").innerHTML=`<div class="modal-overlay" data-action="modal-bg"><div class="modal modal-wide">
     <div class="modal-head"><h3 class="modal-title">Дільниця</h3><button class="icon-btn" data-action="modal-close">✕</button></div>
     <div class="modal-body">
       <input type="hidden" id="dm-id" value="${esc(d.id)}"/>
       <label class="field mb12"><span>Назва</span><input class="input" id="dm-name" value="${esc(d.name)}"/></label>
-      <div class="field"><span>Керівники (доступ до дільниці)</span><div class="chk-list">${checks}</div></div>
+      <div class="cards2">
+        <div class="field"><span>Керівники (доступ до дільниці)</span><div class="chk-list">${checks}</div></div>
+        <div class="field"><span>Поля запису на цій дільниці</span><div class="chk-list">${fieldChecks}</div></div>
+      </div>
+      <div class="muted small mt8">Познач, які поля показувати начальнику саме цієї дільниці. Нові поля створюються у вкладці «Поля».</div>
       <div class="row gap8 mt16 end"><button class="btn btn-ghost" data-action="modal-close">Скасувати</button><button class="btn btn-primary" data-action="dept-save">Зберегти</button></div>
     </div></div></div>`;
 }
@@ -1160,7 +1167,7 @@ document.addEventListener("click", async (e)=>{
   if(a==="mgr-add"){ const name=($("mgr-name").value||"").trim(); const pin=($("mgr-pin").value||"").replace(/\D/g,"").slice(0,4); if(!name){ toast("error","Введіть ім'я керівника"); return; } saveMeta(m=>m.managers.push({id:uid(),name,pin,perms:{employees:true,editRecords:true,export:true}})); toast("ok","Керівника додано"); return; }
   if(a==="mgr-del"){ if(confirm("Видалити керівника?")) saveMeta(m=>{ m.managers=m.managers.filter(x=>x.id!==t.dataset.id); m.departments.forEach(d=>{ d.managerIds=(d.managerIds||[]).filter(x=>x!==t.dataset.id); }); }); return; }
 
-  if(a==="dept-save"){ const id=$("dm-id").value; const name=($("dm-name").value||"").trim(); const ids=[...document.querySelectorAll(".dept-mgr-chk:checked")].map(x=>x.value); saveMeta(m=>{ const d=m.departments.find(x=>x.id===id); if(d){ if(name)d.name=name; d.managerIds=ids; } }); closeModal(); return; }
+  if(a==="dept-save"){ const id=$("dm-id").value; const name=($("dm-name").value||"").trim(); const ids=[...document.querySelectorAll(".dept-mgr-chk:checked")].map(x=>x.value); const onF=new Set([...document.querySelectorAll(".dept-fld-chk:checked")].map(x=>x.value)); const allF=[...document.querySelectorAll(".dept-fld-chk")].map(x=>x.value); saveMeta(m=>{ const d=m.departments.find(x=>x.id===id); if(d){ if(name)d.name=name; d.managerIds=ids; } const allDeptIds=m.departments.map(x=>x.id); allF.forEach(fid=>{ const fl=m.fields.find(y=>y.id===fid); if(fl) setFieldDept(fl,id,onF.has(fid),allDeptIds); }); }); closeModal(); toast("ok","Дільницю збережено"); return; }
   if(a==="mgr-edit"){ openManagerModal(t.dataset.id); return; }
   if(a==="mgr-save"){ const id=$("mm-id").value; const name=($("mm-name").value||"").trim(); const pin=($("mm-pin").value||"").replace(/\D/g,"").slice(0,4); const perms={ employees:$("mm-emp").checked, editRecords:$("mm-edit").checked, export:$("mm-exp").checked }; saveMeta(m=>{ const mg=m.managers.find(x=>x.id===id); if(mg){ if(name)mg.name=name; mg.pin=pin; mg.perms=perms; } }); closeModal(); return; }
   if(a==="order-new"){ openOrderModal(""); return; }
